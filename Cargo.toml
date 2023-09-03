@@ -1,0 +1,40 @@
+[package]
+name = "amethyst"
+version = "0.1.0"
+edition = "2021"
+
+[workspace]
+members = [
+  "crates/*",
+]
+
+[dev-dependencies]
+env_logger = "0.10.0"
+log = "0.4.14"
+
+[dependencies]
+amethyst-internal = { path = "crates/amethyst-internal", version = "0.1.0" }
+
+[features]
+default = [
+  "render",
+  "vulkan",
+  "window"
+]
+
+render = ["amethyst-internal/amethyst-render"]
+vulkan = ["amethyst-internal/amethyst-vulkan"]
+window = ["amethyst-internal/amethyst-window"]
+
+[[example]]
+name = "triangle"
+
+[[example]]
+name = "rectangle"
+
+[[example]]
+name = "rotating-triangle"
+
+[profile.release]
+codegen-units = 1
+lto = true

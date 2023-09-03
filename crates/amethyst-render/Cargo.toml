@@ -1,0 +1,8 @@
+[package]
+name = "amethyst-render"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+amethyst-vulkan = { path = "../amethyst-vulkan", version = "0.1.0" }
+amethyst-math = { path = "../amethyst-math", version = "0.1.0" }

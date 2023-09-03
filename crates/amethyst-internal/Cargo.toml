@@ -1,0 +1,13 @@
+[package]
+name = "amethyst-internal"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+amethyst-ecs = { path = "../amethyst-ecs", version = "0.1.0" }
+amethyst-core = { path = "../amethyst-core", version = "0.1.0" }
+amethyst-math = { path = "../amethyst-math", version = "0.1.0" }
+amethyst-render = { path = "../amethyst-render", version = "0.1.0", optional = true }
+amethyst-vulkan = { path = "../amethyst-vulkan", version = "0.1.0", optional = true }
+amethyst-window = { path = "../amethyst-window", version = "0.1.0", optional = true }
+

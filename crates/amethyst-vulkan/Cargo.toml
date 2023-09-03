@@ -1,0 +1,14 @@
+[package]
+name = "amethyst-vulkan"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+amethyst-window = { path = "../amethyst-window", version = "0.1.0" }
+amethyst-core = { path = "../amethyst-core", version = "0.1.0" }
+
+vk-mem-vulkanalia = { git = "https://github.com/haoud/vk-mem-vulkanalia.git"}
+vulkanalia = { version = "0.21.0", features = ["libloading", "window", "provisional"]}
+bitflags = "2.4.0"
+shaderc = "0.8.2"
+log = "0.4.20"

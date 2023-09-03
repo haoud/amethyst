@@ -1,0 +1,10 @@
+[package]
+name = "amethyst-window"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+amethyst-core = { path = "../amethyst-core" }
+raw-window-handle = "0.5.2"
+winit = "0.28.6"
+log = "0.4.20"
