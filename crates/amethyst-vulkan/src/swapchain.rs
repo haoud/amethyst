@@ -1,6 +1,6 @@
 use crate::{
     device::RenderDevice,
-    prelude::{Image, ImageMemory, ImageView},
+    prelude::{Image, ImageMemory, ImageView, ImageViewCreateInfo},
     surface::{ColorSpace, Extent2D, Format},
     sync::Semaphore,
     Vulkan,
@@ -82,45 +82,25 @@ impl Swapchain {
                 .get_swapchain_images_khr(swapchain)
                 .expect("Failed to get swapchain images")
                 .into_iter()
-                .map(|image| Image::new(image, ImageMemory::Swapchain))
+                .map(|image| Image::raw(image, ImageMemory::Swapchain))
                 .collect::<Vec<_>>()
         };
 
         // Create an image views for each swapchain images.
-        let images_views = unsafe {
-            let components = vk::ComponentMapping::builder()
-                .r(vk::ComponentSwizzle::IDENTITY)
-                .g(vk::ComponentSwizzle::IDENTITY)
-                .b(vk::ComponentSwizzle::IDENTITY)
-                .a(vk::ComponentSwizzle::IDENTITY);
-
-            let subresource_range = vk::ImageSubresourceRange::builder()
-                .aspect_mask(vk::ImageAspectFlags::COLOR)
-                .base_array_layer(0)
-                .base_mip_level(0)
-                .level_count(1)
-                .layer_count(1);
-
-            images
-                .iter()
-                .map(|image| {
-                    let info = vk::ImageViewCreateInfo::builder()
-                        .subresource_range(*subresource_range)
-                        .format(swapchain_format.format.into())
-                        .view_type(vk::ImageViewType::_2D)
-                        .components(*components)
-                        .image(image.inner());
-
-                    let inner = device
-                        .logical()
-                        .inner()
-                        .create_image_view(&info, None)
-                        .expect("Failed to create image view");
-
-                    ImageView::new(inner)
-                })
-                .collect::<Vec<_>>()
-        };
+        let images_views = images
+            .iter()
+            .map(|image| {
+                let format: vk::Format = swapchain_format.format.into();
+                ImageView::new(
+                    Arc::clone(&device),
+                    image,
+                    ImageViewCreateInfo {
+                        format: format.into(),
+                        ..Default::default()
+                    },
+                )
+            })
+            .collect::<Vec<_>>();
 
         Self {
             inner: swapchain,
@@ -220,13 +200,6 @@ impl Swapchain {
 impl Drop for Swapchain {
     fn drop(&mut self) {
         unsafe {
-            for view in &self.images_views {
-                self.device
-                    .logical()
-                    .inner()
-                    .destroy_image_view(view.inner(), None);
-            }
-
             self.device
                 .logical()
                 .inner()

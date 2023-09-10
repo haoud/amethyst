@@ -1,7 +1,7 @@
 use crate::{device::RenderDevice, surface::Format};
 use std::{mem::ManuallyDrop, sync::Arc};
 use vk_mem_vulkanalia::{Allocation, AllocationCreateFlags, AllocationCreateInfo, MemoryUsage};
-use vulkanalia::prelude::v1_2::*;
+use vulkanalia::{prelude::v1_2::*, vk::BufferUsageFlags};
 
 pub mod allocator;
 pub mod subbuffer;
@@ -30,6 +30,7 @@ impl Drop for Buffer {
 /// The kind of buffer
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum BufferKind {
+    None,
     Uniforms,
     Vertices,
     Indices,
@@ -43,6 +44,7 @@ impl From<BufferKind> for vk::BufferUsageFlags {
             BufferKind::Vertices => vk::BufferUsageFlags::VERTEX_BUFFER,
             BufferKind::Storage => vk::BufferUsageFlags::STORAGE_BUFFER,
             BufferKind::Indices => vk::BufferUsageFlags::INDEX_BUFFER,
+            BufferKind::None => vk::BufferUsageFlags::empty(),
         }
     }
 }
@@ -66,8 +68,12 @@ impl From<BufferMemoryLocation> for AllocationCreateInfo {
     fn from(location: BufferMemoryLocation) -> Self {
         match location {
             BufferMemoryLocation::PreferHostVisible => Self {
-                usage: MemoryUsage::AutoPreferHost,
+                required_flags: vk::MemoryPropertyFlags::HOST_VISIBLE
+                    | vk::MemoryPropertyFlags::HOST_COHERENT,
+                preferred_flags: vk::MemoryPropertyFlags::HOST_VISIBLE
+                    | vk::MemoryPropertyFlags::HOST_COHERENT,
                 flags: AllocationCreateFlags::MAPPED,
+                usage: MemoryUsage::AutoPreferHost,
                 ..Default::default()
             },
             BufferMemoryLocation::PreferDeviceLocal => Self {
@@ -92,7 +98,7 @@ pub enum BufferTransfert {
     All,
 }
 
-impl From<BufferTransfert> for vk::BufferUsageFlags {
+impl From<BufferTransfert> for BufferUsageFlags {
     fn from(usage: BufferTransfert) -> Self {
         match usage {
             BufferTransfert::Destination => vk::BufferUsageFlags::TRANSFER_DST,

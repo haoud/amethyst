@@ -188,10 +188,15 @@ impl LogicalDevice {
             .dynamic_rendering(true)
             .build();
 
+        let features = vk::PhysicalDeviceFeatures::builder()
+            .sampler_anisotropy(true)
+            .build();
+
         // Prepare the creation info for the logical device and create it
         let creation_info = vk::DeviceCreateInfo::builder()
             .enabled_extension_names(&extensions)
             .queue_create_infos(&queues_info)
+            .enabled_features(&features)
             .push_next(&mut vulkan_1_3_features);
 
         let inner = unsafe {

@@ -48,6 +48,7 @@ pub enum Format {
     R32G32Sfloat,
     R32G32B32Sfloat,
     R32G32B32A32Sfloat,
+    D32Sfloat,
 }
 
 impl From<Format> for vk::Format {
@@ -60,6 +61,7 @@ impl From<Format> for vk::Format {
             Format::R32G32B32A32Sfloat => vk::Format::R32G32B32A32_SFLOAT,
             Format::B8G8R8A8Srgb => vk::Format::B8G8R8A8_SRGB,
             Format::R8G8B8A8Srgb => vk::Format::R8G8B8A8_SRGB,
+            Format::D32Sfloat => vk::Format::D32_SFLOAT,
         }
     }
 }
@@ -74,6 +76,7 @@ impl From<vk::Format> for Format {
             vk::Format::R32G32B32A32_SFLOAT => Self::R32G32B32A32Sfloat,
             vk::Format::R8G8B8A8_SRGB => Self::R8G8B8A8Srgb,
             vk::Format::B8G8R8A8_SRGB => Self::B8G8R8A8Srgb,
+            vk::Format::D32_SFLOAT => Self::D32Sfloat,
             _ => Self::Undefined,
         }
     }
@@ -126,6 +129,34 @@ impl From<Extent2D> for vk::Extent2D {
         Self {
             height: extent.height,
             width: extent.width,
+        }
+    }
+}
+
+// An 3D extent
+#[derive(Default, Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct Extent3D {
+    pub width: u32,
+    pub height: u32,
+    pub depth: u32,
+}
+
+impl From<vk::Extent3D> for Extent3D {
+    fn from(extent: vk::Extent3D) -> Self {
+        Self {
+            height: extent.height,
+            width: extent.width,
+            depth: extent.depth,
+        }
+    }
+}
+
+impl From<Extent3D> for vk::Extent3D {
+    fn from(extent: Extent3D) -> Self {
+        Self {
+            height: extent.height,
+            width: extent.width,
+            depth: extent.depth,
         }
     }
 }

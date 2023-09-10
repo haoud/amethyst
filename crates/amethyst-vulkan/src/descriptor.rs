@@ -1,5 +1,8 @@
 use crate::{
-    buffer::subbuffer::SubBuffer, device::RenderDevice, prelude::Pipeline, shader::ShaderStages,
+    buffer::subbuffer::SubBuffer,
+    device::RenderDevice,
+    prelude::{ImageDescriptorInfo, Pipeline},
+    shader::ShaderStages,
 };
 use std::sync::Arc;
 use vulkanalia::prelude::v1_2::*;
@@ -13,16 +16,20 @@ pub struct DescriptorPool {
 impl DescriptorPool {
     /// Create a new descriptor pool.
     #[must_use]
-    pub fn new(device: Arc<RenderDevice>, info: DescriptorPoolCreateInfo) -> Self {
-        let pool_size = vk::DescriptorPoolSize::builder()
-            .type_(vk::DescriptorType::UNIFORM_BUFFER)
-            .descriptor_count(info.descriptor_count)
-            .build();
+    pub fn new(device: Arc<RenderDevice>, infos: &[DescriptorPoolCreateInfo]) -> Self {
+        let pool_sizes = infos
+            .iter()
+            .map(|info| {
+                vk::DescriptorPoolSize::builder()
+                    .descriptor_count(info.descriptor_count)
+                    .type_(info.descriptor_type.into())
+                    .build()
+            })
+            .collect::<Vec<_>>();
 
-        let pool_sizes = &[pool_size];
         let create_info = vk::DescriptorPoolCreateInfo::builder()
-            .pool_sizes(pool_sizes)
-            .max_sets(info.max_sets)
+            .pool_sizes(&pool_sizes)
+            .max_sets(1)
             .build();
 
         let inner = unsafe {
@@ -94,7 +101,7 @@ impl DescriptorSet {
 
     /// Update the descriptor set with the given buffer. The buffer must have
     /// the same size as the uniform variable.
-    pub fn update<T>(&self, buffer: &SubBuffer<T>) {
+    pub fn update_buffer<T>(&self, binding: u32, buffer: &SubBuffer<T>) {
         let buffer_info = vk::DescriptorBufferInfo::builder()
             .range(buffer.size() as u64)
             .buffer(buffer.inner())
@@ -105,8 +112,33 @@ impl DescriptorSet {
         let descriptor_write = vk::WriteDescriptorSet::builder()
             .descriptor_type(vk::DescriptorType::UNIFORM_BUFFER)
             .buffer_info(buffer_infos)
+            .dst_binding(binding)
             .dst_set(self.inner)
-            .dst_binding(0)
+            .build();
+
+        unsafe {
+            self.device
+                .logical()
+                .inner()
+                .update_descriptor_sets(&[descriptor_write], &[] as &[vk::CopyDescriptorSet]);
+        }
+    }
+
+    /// Update the descriptor set with the given buffer. The buffer must have
+    /// the same size as the uniform variable.
+    pub fn update_image(&self, binding: u32, info: ImageDescriptorInfo) {
+        let image_info = vk::DescriptorImageInfo::builder()
+            .image_layout(info.layout.into())
+            .image_view(info.view.inner())
+            .sampler(info.sampler.inner())
+            .build();
+
+        let images_infos = &[image_info];
+        let descriptor_write = vk::WriteDescriptorSet::builder()
+            .descriptor_type(vk::DescriptorType::COMBINED_IMAGE_SAMPLER)
+            .image_info(images_infos)
+            .dst_binding(binding)
+            .dst_set(self.inner)
             .build();
 
         unsafe {
@@ -138,7 +170,7 @@ impl DescriptorSetLayout {
             .iter()
             .map(|layout| {
                 vk::DescriptorSetLayoutBinding::builder()
-                    .descriptor_type(vk::DescriptorType::UNIFORM_BUFFER)
+                    .descriptor_type(layout.descriptor_type.into())
                     .stage_flags(layout.shader_stages.into())
                     .binding(layout.binding)
                     .descriptor_count(1)
@@ -180,6 +212,9 @@ impl Drop for DescriptorSetLayout {
 
 /// Configuration used to create a descriptor set layout.
 pub struct DescriptorSetLayoutBinding {
+    /// The type of descriptor
+    pub descriptor_type: DescriptorType,
+
     /// A set of shader stages flags to describe in which shader stages the
     /// descriptor is used. This allow some optimizations to be made by the
     /// driver if the descriptor is not used in some stages.
@@ -192,6 +227,7 @@ pub struct DescriptorSetLayoutBinding {
 impl Default for DescriptorSetLayoutBinding {
     fn default() -> Self {
         Self {
+            descriptor_type: DescriptorType::Uniform,
             shader_stages: ShaderStages::ALL,
             binding: 0,
         }
@@ -200,18 +236,33 @@ impl Default for DescriptorSetLayoutBinding {
 
 /// Configuration used to create a descriptor pool.
 pub struct DescriptorPoolCreateInfo {
+    /// The type of descriptor to allocate.
+    pub descriptor_type: DescriptorType,
+
     /// The number of descriptors of the specified type to allocate.
     pub descriptor_count: u32,
-
-    /// The maximum number of sets that can be allocated from the pool.
-    pub max_sets: u32,
 }
 
 impl Default for DescriptorPoolCreateInfo {
     fn default() -> Self {
         Self {
+            descriptor_type: DescriptorType::Uniform,
             descriptor_count: 1,
-            max_sets: 1,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum DescriptorType {
+    Sampler,
+    Uniform,
+}
+
+impl From<DescriptorType> for vk::DescriptorType {
+    fn from(descriptor_type: DescriptorType) -> Self {
+        match descriptor_type {
+            DescriptorType::Sampler => vk::DescriptorType::COMBINED_IMAGE_SAMPLER,
+            DescriptorType::Uniform => vk::DescriptorType::UNIFORM_BUFFER,
         }
     }
 }

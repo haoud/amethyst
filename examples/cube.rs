@@ -10,20 +10,122 @@ struct UniformData {
     view: glm::Mat4,
 }
 
-/// The vertices of the triangle
-static VERTICES: [Vertex3DColor; 3] = [
+/// The vertices of the cube. We need to duplicate the vertices because
+/// each vertex can have only one color. If we don't duplicate them, it
+/// will be impossible to have a cube with different colors on each face,
+/// and the cube will have a ugly gradient color (trust me).
+static VERTICES: [Vertex3DColor; 24] = [
+    // Front face
     Vertex3DColor {
-        position: [0.0, -0.5, 0.0],
-        color: [0.0, 0.0, 1.0],
-    },
-    Vertex3DColor {
-        position: [0.5, 0.5, 0.0],
+        position: [-0.5, -0.5, -0.5],
         color: [1.0, 0.0, 0.0],
     },
     Vertex3DColor {
-        position: [-0.5, 0.5, 0.0],
+        position: [0.5, -0.5, -0.5],
+        color: [1.0, 0.0, 0.0],
+    },
+    Vertex3DColor {
+        position: [0.5, 0.5, -0.5],
+        color: [1.0, 0.0, 0.0],
+    },
+    Vertex3DColor {
+        position: [-0.5, 0.5, -0.5],
+        color: [1.0, 0.0, 0.0],
+    },
+    // Back face
+    Vertex3DColor {
+        position: [-0.5, -0.5, 0.5],
         color: [0.0, 1.0, 0.0],
     },
+    Vertex3DColor {
+        position: [0.5, -0.5, 0.5],
+        color: [0.0, 1.0, 0.0],
+    },
+    Vertex3DColor {
+        position: [0.5, 0.5, 0.5],
+        color: [0.0, 1.0, 0.0],
+    },
+    Vertex3DColor {
+        position: [-0.5, 0.5, 0.5],
+        color: [0.0, 1.0, 0.0],
+    },
+    // Top face
+    Vertex3DColor {
+        position: [-0.5, 0.5, -0.5],
+        color: [0.0, 0.0, 1.0],
+    },
+    Vertex3DColor {
+        position: [0.5, 0.5, -0.5],
+        color: [0.0, 0.0, 1.0],
+    },
+    Vertex3DColor {
+        position: [0.5, 0.5, 0.5],
+        color: [0.0, 0.0, 1.0],
+    },
+    Vertex3DColor {
+        position: [-0.5, 0.5, 0.5],
+        color: [0.0, 0.0, 1.0],
+    },
+    // Bottom face
+    Vertex3DColor {
+        position: [-0.5, -0.5, -0.5],
+        color: [1.0, 1.0, 0.0],
+    },
+    Vertex3DColor {
+        position: [0.5, -0.5, -0.5],
+        color: [1.0, 1.0, 0.0],
+    },
+    Vertex3DColor {
+        position: [0.5, -0.5, 0.5],
+        color: [1.0, 1.0, 0.0],
+    },
+    Vertex3DColor {
+        position: [-0.5, -0.5, 0.5],
+        color: [1.0, 1.0, 0.0],
+    },
+    // Right face
+    Vertex3DColor {
+        position: [0.5, -0.5, -0.5],
+        color: [0.0, 1.0, 1.0],
+    },
+    Vertex3DColor {
+        position: [0.5, 0.5, -0.5],
+        color: [0.0, 1.0, 1.0],
+    },
+    Vertex3DColor {
+        position: [0.5, 0.5, 0.5],
+        color: [0.0, 1.0, 1.0],
+    },
+    Vertex3DColor {
+        position: [0.5, -0.5, 0.5],
+        color: [0.0, 1.0, 1.0],
+    },
+    // Left face
+    Vertex3DColor {
+        position: [-0.5, -0.5, -0.5],
+        color: [1.0, 0.0, 1.0],
+    },
+    Vertex3DColor {
+        position: [-0.5, 0.5, -0.5],
+        color: [1.0, 0.0, 1.0],
+    },
+    Vertex3DColor {
+        position: [-0.5, 0.5, 0.5],
+        color: [1.0, 0.0, 1.0],
+    },
+    Vertex3DColor {
+        position: [-0.5, -0.5, 0.5],
+        color: [1.0, 0.0, 1.0],
+    },
+];
+
+static INDICES: [u16; 36] = [
+    0, 1, 2, 2, 3, 0, // Front face
+    4, 5, 6, 6, 7, 4, // Back face
+    8, 9, 10, 10, 11, 8, // Top face
+    12, 13, 14, 14, 15, 12, // Bottom face
+    16, 17, 18, 18, 19, 16, // Right face
+    20, 21, 22, 22, 23, 20, // Left face
 ];
 
 fn main() {
@@ -40,7 +142,7 @@ fn main() {
     let window = Window::new(
         &mut engine,
         WindowInfo {
-            title: "Amethyst rotating triangle",
+            title: "Amethyst 3D cube",
             ..Default::default()
         },
     );
@@ -70,15 +172,9 @@ fn main() {
         },
     );
 
-    // Get the height and width of the swapchain. This should be the same
-    // as the window's height and width, but it may be different in some
-    // cases.
     let height = swapchain.extent().height as f32;
     let width = swapchain.extent().width as f32;
 
-    // Create a descriptor set layout to describe the data that will be
-    // passed to the shaders. Here, we only pass one uniform buffer, so
-    // we create a descriptor set layout with only one binding.
     let descriptor_layout = DescriptorSetLayout::new(
         Arc::clone(&device),
         &[DescriptorSetLayoutBinding {
@@ -113,21 +209,57 @@ fn main() {
                 ),
             ],
 
-            // The descriptor set layout is used to describe the data that
-            // will be passed to the shaders. Here, we only pass the uniform
-            // data, so we only need one descriptor set layout.
             descriptor_set_layouts: vec![descriptor_layout],
 
-            // Disable the culling of the back faces of the triangle. This
-            // is necessary because the triangle is rotating, and we want
-            // to see all the faces
+            /// Disable the culling because the cube has some clockwise and
+            /// counter-clockwise faces, and I'm too lazy to fix it now.
             cull_mode: CullMode::None,
+
+            /// The format of the depth buffer. Theoricaly, we should to verify
+            /// if this format is supported by the device, but this format is
+            /// almost always supported by Vulkan implementations.
+            depth_format: ImageFormat::D32SFLOAT,
+
+            // Enable writing to the depth buffer when rendering.
+            depth_write: true,
+
+            // Enable depth testing. The depth test is used to discard the
+            // fragments that are behind other fragments.
+            depth_test: true,
+
             ..Default::default()
         },
     );
 
-    // Create a camera. The camera is used to create the view and projection
-    // matrices that will be passed to the shaders.
+    // Create the depth buffer. The depth buffer (or depth image) has the
+    // same size as the swapchain images. We don't need to provide data
+    // because we will never read from the depth buffer before writing to
+    // it.
+    let depth_image = Image::new(
+        Arc::clone(&device),
+        ImageCreateInfo {
+            usage: ImageUsage::DEPTH_STENCIL_ATTACHMENT,
+            format: ImageFormat::D32SFLOAT,
+            extent: swapchain.extent(),
+            data: &[],
+        },
+    );
+
+    // Create the depth buffer view. The depth buffer view is used to
+    // describe how to access the depth image.
+    let depth_view = ImageView::new(
+        Arc::clone(&device),
+        &depth_image,
+        ImageViewCreateInfo {
+            subresource: ImageSubResourceRange {
+                aspect_mask: ImageAspectFlags::DEPTH,
+                ..Default::default()
+            },
+            format: ImageFormat::D32SFLOAT,
+            kind: ImageViewKind::Type2D,
+        },
+    );
+
     let camera = Camera::new(CameraCreateInfo {
         direction: glm::vec3(0.0, 0.0, 0.0),
         position: glm::vec3(1.0, 1.0, 1.0),
@@ -136,7 +268,6 @@ fn main() {
         ..Default::default()
     });
 
-    // Create a buffer to store the uniform data.
     let uniform_buffer = SubBuffer::new(
         Arc::clone(&device),
         &[UniformData {
@@ -148,7 +279,6 @@ fn main() {
         SubBufferCreateInfo::UNIFORM,
     );
 
-    // Create a buffer to store the vertices of the triangle.
     let vertices_buffer = SubBuffer::new(
         Arc::clone(&device),
         &VERTICES,
@@ -156,7 +286,13 @@ fn main() {
         SubBufferCreateInfo::STATIC_RENDERING,
     );
 
-    // Create a descriptor pool to allocate the descriptor sets.
+    let indices_buffer = SubBuffer::new(
+        Arc::clone(&device),
+        &INDICES,
+        BufferKind::Indices,
+        SubBufferCreateInfo::STATIC_RENDERING,
+    );
+
     let descriptor_pool = Arc::new(DescriptorPool::new(
         Arc::clone(&device),
         &[DescriptorPoolCreateInfo {
@@ -166,7 +302,6 @@ fn main() {
         }],
     ));
 
-    // Create and update the descriptor set with the new uniform buffer.
     let descriptor_set = DescriptorSet::new(Arc::clone(&device), descriptor_pool, &pipeline);
     descriptor_set.update_buffer(0, &uniform_buffer);
 
@@ -184,8 +319,8 @@ fn main() {
 
                 let model = glm::rotate(
                     &glm::identity(),
-                    start.elapsed().as_secs_f32() * glm::radians(&glm::vec1(90.0))[0],
-                    &glm::vec3(0.0, 1.0, 0.0),
+                    start.elapsed().as_secs_f32() * 0.5 * glm::radians(&glm::vec1(90.0))[0],
+                    &glm::vec3(1.0, 1.0, 0.0),
                 );
 
                 // Create a new command buffer from the command pool.
@@ -220,8 +355,25 @@ fn main() {
                             image: image,
                         }],
                     })
+                    .pipeline_barrier(PipelineBarrierInfo {
+                        src_stage_mask: PipelineStage::TOP_OF_PIPE,
+                        dst_stage_mask: PipelineStage::EARLY_FRAGMENT_TESTS,
+                        images_barriers: vec![ImageBarrier {
+                            subresource_range: ImageSubResourceRange {
+                                aspect_mask: ImageAspectFlags::DEPTH,
+                                ..Default::default()
+                            },
+                            src_access_mask: ImageAccess::UNDEFINED,
+                            dst_access_mask: ImageAccess::DEPTH_STENCIL_ATTACHMENT_READ
+                                | ImageAccess::DEPTH_STENCIL_ATTACHMENT_WRITE,
+                            old_layout: ImageLayout::Undefined,
+                            new_layout: ImageLayout::DepthStencilAttachmentOptimal,
+                            image: &depth_image,
+                        }],
+                    })
                     .bind_graphics_pipeline(&pipeline)
                     .bind_vertex_buffers(&vertices_buffer)
+                    .bind_indices_buffers(&indices_buffer, IndicesType::U16)
                     .bind_descriptor_sets(&pipeline, &[&descriptor_set])
                     .start_rendering(RenderingInfo {
                         render_area: swapchain.extent(),
@@ -232,13 +384,19 @@ fn main() {
                             store_op: AttachmentStoreOp::Store,
                             clear_value: ClearValue::Color([0.0, 0.0, 0.0, 1.0]),
                         }],
-                        depth_attachement: None,
+                        depth_attachement: Some(RenderingAttachementInfo {
+                            image_view: &depth_view,
+                            image_layout: ImageLayout::DepthStencilAttachmentOptimal,
+                            load_op: AttachmentLoadOp::Clear,
+                            store_op: AttachmentStoreOp::Discard,
+                            clear_value: ClearValue::DepthStencil(1.0, 0),
+                        }),
                     })
-                    .draw(DrawCommandInfo {
-                        vertex_count: VERTICES.len() as u32,
+                    .draw_indexed(DrawIndexedCommandInfo {
+                        index_count: INDICES.len() as u32,
                         instance_count: 1,
                         first_instance: 0,
-                        first_vertex: 0,
+                        first_index: 0,
                     })
                     .end_rendering()
                     .pipeline_barrier(PipelineBarrierInfo {

@@ -11,6 +11,7 @@ members = [
 [dev-dependencies]
 env_logger = "0.10.0"
 log = "0.4.14"
+png = "0.17.10"
 
 [dependencies]
 amethyst-internal = { path = "crates/amethyst-internal", version = "0.1.0" }
@@ -34,6 +35,9 @@ name = "rectangle"
 
 [[example]]
 name = "rotating-triangle"
+
+[[example]]
+name = "textured-rectangle"
 
 [profile.release]
 codegen-units = 1

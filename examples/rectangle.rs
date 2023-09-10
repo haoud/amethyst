@@ -121,6 +121,7 @@ fn main() {
                     },
                 ),
             ],
+            front_face: FrontFace::Clockwise,
             ..Default::default()
         },
     );
@@ -178,6 +179,7 @@ fn main() {
                         src_stage_mask: PipelineStage::TOP_OF_PIPE,
                         dst_stage_mask: PipelineStage::COLOR_ATTACHMENT_OUTPUT,
                         images_barriers: vec![ImageBarrier {
+                            subresource_range: ImageSubResourceRange::default(),
                             src_access_mask: ImageAccess::UNDEFINED,
                             dst_access_mask: ImageAccess::COLOR_ATTACHMENT_WRITE,
                             old_layout: ImageLayout::Undefined,
@@ -197,8 +199,9 @@ fn main() {
                             image_layout: ImageLayout::AttachmentOptimal,
                             load_op: AttachmentLoadOp::Clear,
                             store_op: AttachmentStoreOp::Store,
-                            clear_color: [0.0, 0.0, 0.0, 1.0],
+                            clear_value: ClearValue::Color([0.0, 0.0, 0.0, 1.0]),
                         }],
+                        depth_attachement: None,
                     })
                     // Draw the triangle.
                     .draw_indexed(DrawIndexedCommandInfo {
@@ -217,6 +220,7 @@ fn main() {
                         src_stage_mask: PipelineStage::COLOR_ATTACHMENT_OUTPUT,
                         dst_stage_mask: PipelineStage::BOTTOM_OF_PIPE,
                         images_barriers: vec![ImageBarrier {
+                            subresource_range: ImageSubResourceRange::default(),
                             src_access_mask: ImageAccess::COLOR_ATTACHMENT_WRITE,
                             dst_access_mask: ImageAccess::UNDEFINED,
                             old_layout: ImageLayout::ColorAttachmentOptimal,

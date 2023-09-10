@@ -28,24 +28,44 @@ impl<T: Sized> SubBuffer<T> {
         kind: BufferKind,
         info: SubBufferCreateInfo,
     ) -> Self {
-        let transfert = vk::BufferUsageFlags::from(info.transfer);
-        let flags = vk::BufferUsageFlags::from(kind);
-        let size = std::mem::size_of::<T>() * data.len();
+        let buffer = Self::empty(device, data.len() * std::mem::size_of::<T>(), kind, info);
+        buffer.update(SubBufferUpdateInfo { data });
+        buffer
+    }
 
+    /// Create a new empty buffer. The buffer will be allocated using the buffer allocator
+    /// of the logical device.
+    #[must_use]
+    pub fn empty(
+        device: Arc<RenderDevice>,
+        size: usize,
+        kind: BufferKind,
+        info: SubBufferCreateInfo,
+    ) -> Self {
         let mut create_info = AllocationCreateInfo::from(info.location);
         create_info.flags |= AllocationCreateFlags::from(info.access);
 
+        if info.memory_type != 0 {
+            create_info = AllocationCreateInfo {
+                flags: AllocationCreateFlags::from(info.access),
+                memory_type_bits: info.memory_type,
+                ..Default::default()
+            };
+        }
+
         let (buffer, allocation) = unsafe {
+            let transfert = vk::BufferUsageFlags::from(info.transfer);
+            let flags = vk::BufferUsageFlags::from(kind);
+
+            let buffer_create_info = vk::BufferCreateInfo::builder()
+                .usage(transfert | flags)
+                .size(size as u64)
+                .build();
+
             device
                 .buffer_allocator()
                 .inner()
-                .create_buffer(
-                    &vk::BufferCreateInfo::builder()
-                        .usage(transfert | flags)
-                        .size(size as u64)
-                        .build(),
-                    &create_info,
-                )
+                .create_buffer_with_alignment(&buffer_create_info, &create_info, 0x10000 as u64)
                 .expect("Failed to create buffer")
         };
 
@@ -56,17 +76,13 @@ impl<T: Sized> SubBuffer<T> {
             kind,
         };
 
-        let view = Self {
+        Self {
             marker: PhantomData,
             offset: 0,
             buffer,
             info,
             size,
-        };
-
-        view.update(SubBufferUpdateInfo { data });
-
-        view
+        }
     }
 
     /// Update the buffer data. If the buffer is host visible, the data will be
@@ -160,6 +176,30 @@ impl<T> SubBuffer<T> {
         self.buffer.inner
     }
 
+    pub(crate) fn device_memory_offset(&self) -> u64 {
+        unsafe {
+            self.buffer
+                .device
+                .buffer_allocator()
+                .inner()
+                .get_allocation_info(&self.buffer.allocation)
+                .expect("Failed to get allocation info")
+                .offset
+        }
+    }
+
+    pub(crate) fn device_memory(&self) -> vk::DeviceMemory {
+        unsafe {
+            self.buffer
+                .device
+                .buffer_allocator()
+                .inner()
+                .get_allocation_info(&self.buffer.allocation)
+                .expect("Failed to get allocation info")
+                .device_memory
+        }
+    }
+
     /// Returns the offset of the sub buffer.
     pub fn offset(&self) -> usize {
         self.offset
@@ -183,6 +223,7 @@ pub struct SubBufferCreateInfo {
     pub location: BufferMemoryLocation,
     pub transfer: BufferTransfert,
     pub access: BufferAccessMode,
+    pub memory_type: u32,
 }
 
 impl SubBufferCreateInfo {
@@ -193,6 +234,7 @@ impl SubBufferCreateInfo {
         location: BufferMemoryLocation::PreferDeviceLocal,
         transfer: BufferTransfert::Destination,
         access: BufferAccessMode::None,
+        memory_type: 0,
     };
 
     /// A pre-defined buffer create info for creating a staging buffer. This
@@ -202,6 +244,7 @@ impl SubBufferCreateInfo {
         location: BufferMemoryLocation::PreferHostVisible,
         transfer: BufferTransfert::Source,
         access: BufferAccessMode::Sequential,
+        memory_type: 0,
     };
 
     /// A pre-defined buffer create info for creating a uniform buffer. This
@@ -211,15 +254,24 @@ impl SubBufferCreateInfo {
         location: BufferMemoryLocation::PreferDeviceLocal,
         transfer: BufferTransfert::Destination,
         access: BufferAccessMode::Sequential,
+        memory_type: 0,
+    };
+
+    pub const IMAGE: SubBufferCreateInfo = SubBufferCreateInfo {
+        location: BufferMemoryLocation::PreferDeviceLocal,
+        transfer: BufferTransfert::Destination,
+        access: BufferAccessMode::Sequential,
+        memory_type: 0,
     };
 }
 
 impl Default for SubBufferCreateInfo {
     fn default() -> Self {
         Self {
+            location: BufferMemoryLocation::PreferDeviceLocal,
             transfer: BufferTransfert::Destination,
             access: BufferAccessMode::Sequential,
-            location: BufferMemoryLocation::PreferDeviceLocal,
+            memory_type: 0,
         }
     }
 }

@@ -3,10 +3,10 @@ use crate::{
     descriptor::DescriptorSet,
     device::RenderDevice,
     prelude::{
-        AttachmentLoadOp, AttachmentStoreOp, Image, ImageAccess, ImageLayout, ImageView, Pipeline,
-        PipelineStage,
+        AttachmentLoadOp, AttachmentStoreOp, Image, ImageAccess, ImageLayout,
+        ImageSubResourceLayer, ImageSubResourceRange, ImageView, Pipeline, PipelineStage,
     },
-    surface::Extent2D,
+    surface::{Extent2D, Extent3D},
 };
 use std::{marker::PhantomData, mem::ManuallyDrop, sync::Arc};
 use vulkanalia::{prelude::v1_2::*, vk::DeviceV1_3};
@@ -175,11 +175,38 @@ impl Command<Recording> {
 
     /// Start rendering. This must be done before drawing.
     pub fn start_rendering(self, info: RenderingInfo) -> Self {
+        let colors_attachements = info
+            .colors_attachements
+            .into_iter()
+            .map(|info| vk::RenderingAttachmentInfo::from(info))
+            .collect::<Vec<_>>();
+
+        let depth_attachement = info
+            .depth_attachement
+            .map(|info| vk::RenderingAttachmentInfo::from(info));
+
+        let render_area = vk::Rect2D::builder()
+            .extent(vk::Extent2D::from(info.render_area))
+            .build();
+
+        let builder = vk::RenderingInfo::builder()
+            .color_attachments(&colors_attachements)
+            .render_area(render_area)
+            .layer_count(1);
+
+        let rendering_info = if let Some(depth_attachement) = depth_attachement.as_ref() {
+            builder
+                .depth_attachment(depth_attachement)
+                .build()
+        } else {
+            builder.build()
+        };
+
         unsafe {
             self.device
                 .logical()
                 .inner()
-                .cmd_begin_rendering(self.inner, &info.into());
+                .cmd_begin_rendering(self.inner, &rendering_info);
         }
         self
     }
@@ -272,6 +299,41 @@ impl Command<Recording> {
                 .inner()
                 .cmd_update_buffer(self.inner, buffer.inner(), 0, data);
         }
+        self
+    }
+
+    pub fn copy_buffer_to_image(
+        self,
+        buffer: &SubBuffer<u8>,
+        image: &Image,
+        info: CopyBufferIntoImageInfo,
+    ) -> Self {
+        let subressource = vk::ImageSubresourceLayers::from(info.subresource_layer);
+        let extent = vk::Extent3D::from(info.extent);
+        let offset = vk::Offset3D { x: 0, y: 0, z: 0 };
+
+        let region = vk::BufferImageCopy::builder()
+            .image_subresource(subressource)
+            .image_extent(extent)
+            .image_offset(offset)
+            .buffer_image_height(0)
+            .buffer_row_length(0)
+            .buffer_offset(0)
+            .build();
+
+        unsafe {
+            self.device
+                .logical()
+                .inner()
+                .cmd_copy_buffer_to_image(
+                    self.inner,
+                    buffer.inner(),
+                    image.inner(),
+                    vk::ImageLayout::TRANSFER_DST_OPTIMAL,
+                    &[region],
+                );
+        }
+
         self
     }
 
@@ -369,6 +431,7 @@ pub struct PipelineBarrierInfo<'a> {
 /// can render to them, and then transition them back to the `PRESENT_SRC_KHR` layout before we
 /// can present them.
 pub struct ImageBarrier<'a> {
+    pub subresource_range: ImageSubResourceRange,
     pub src_access_mask: ImageAccess,
     pub dst_access_mask: ImageAccess,
     pub old_layout: ImageLayout,
@@ -378,17 +441,8 @@ pub struct ImageBarrier<'a> {
 
 impl From<ImageBarrier<'_>> for vk::ImageMemoryBarrier {
     fn from(barrier: ImageBarrier) -> Self {
-        // TODO: Make this configurable
-        let subressource_range = vk::ImageSubresourceRange::builder()
-            .aspect_mask(vk::ImageAspectFlags::COLOR)
-            .base_array_layer(0)
-            .base_mip_level(0)
-            .layer_count(1)
-            .level_count(1)
-            .build();
-
         vk::ImageMemoryBarrier::builder()
-            .subresource_range(subressource_range)
+            .subresource_range(vk::ImageSubresourceRange::from(barrier.subresource_range))
             .src_access_mask(barrier.src_access_mask.into())
             .dst_access_mask(barrier.dst_access_mask.into())
             .old_layout(barrier.old_layout.into())
@@ -400,28 +454,9 @@ impl From<ImageBarrier<'_>> for vk::ImageMemoryBarrier {
 
 /// A rendering info.
 pub struct RenderingInfo<'a> {
+    pub depth_attachement: Option<RenderingAttachementInfo<'a>>,
     pub colors_attachements: Vec<RenderingAttachementInfo<'a>>,
     pub render_area: Extent2D,
-}
-
-impl From<RenderingInfo<'_>> for vk::RenderingInfo {
-    fn from(info: RenderingInfo) -> Self {
-        let colors_attachements = info
-            .colors_attachements
-            .into_iter()
-            .map(|info| vk::RenderingAttachmentInfo::from(info))
-            .collect::<Vec<_>>();
-
-        let render_area = vk::Rect2D::builder()
-            .extent(vk::Extent2D::from(info.render_area))
-            .build();
-
-        vk::RenderingInfo::builder()
-            .color_attachments(&colors_attachements)
-            .render_area(render_area)
-            .layer_count(1)
-            .build()
-    }
 }
 
 /// A rendering attachement info.
@@ -430,7 +465,7 @@ pub struct RenderingAttachementInfo<'a> {
     pub image_layout: ImageLayout,
     pub load_op: AttachmentLoadOp,
     pub store_op: AttachmentStoreOp,
-    pub clear_color: [f32; 4],
+    pub clear_value: ClearValue,
 }
 
 impl From<RenderingAttachementInfo<'_>> for vk::RenderingAttachmentInfo {
@@ -438,9 +473,27 @@ impl From<RenderingAttachementInfo<'_>> for vk::RenderingAttachmentInfo {
         vk::RenderingAttachmentInfo::builder()
             .image_layout(info.image_layout.into())
             .image_view(info.image_view.inner())
+            .clear_value(info.clear_value.into())
             .store_op(info.store_op.into())
             .load_op(info.load_op.into())
             .build()
+    }
+}
+pub enum ClearValue {
+    Color([f32; 4]),
+    DepthStencil(f32, u32),
+}
+
+impl From<ClearValue> for vk::ClearValue {
+    fn from(x: ClearValue) -> Self {
+        match x {
+            ClearValue::Color(colors) => vk::ClearValue {
+                color: vk::ClearColorValue { float32: colors },
+            },
+            ClearValue::DepthStencil(depth, stencil) => vk::ClearValue {
+                depth_stencil: vk::ClearDepthStencilValue { depth, stencil },
+            },
+        }
     }
 }
 
@@ -483,4 +536,9 @@ pub struct CopyBufferInfo<'a, T> {
 
     /// The size of the data to copy.
     pub size: u64,
+}
+
+pub struct CopyBufferIntoImageInfo {
+    pub subresource_layer: ImageSubResourceLayer,
+    pub extent: Extent3D,
 }

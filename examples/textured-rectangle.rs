@@ -1,4 +1,5 @@
 pub use amethyst::prelude::*;
+use amethyst_internal::vulkan::image::sampler::{ImageSampler, ImageSamplerCreatInfo};
 use std::sync::Arc;
 
 /// The uniform object that will be passed to the vertex shader.
@@ -10,21 +11,28 @@ struct UniformData {
     view: glm::Mat4,
 }
 
-/// The vertices of the triangle
-static VERTICES: [Vertex3DColor; 3] = [
-    Vertex3DColor {
-        position: [0.0, -0.5, 0.0],
-        color: [0.0, 0.0, 1.0],
+/// The vertices of the rectangle
+static VERTICES: [Vertex3DTexture2D; 4] = [
+    Vertex3DTexture2D {
+        position: [-0.5, -0.5, 0.0],
+        texture: [1.0, 0.0],
     },
-    Vertex3DColor {
+    Vertex3DTexture2D {
+        position: [0.5, -0.5, 0.0],
+        texture: [0.0, 0.0],
+    },
+    Vertex3DTexture2D {
         position: [0.5, 0.5, 0.0],
-        color: [1.0, 0.0, 0.0],
+        texture: [0.0, 1.0],
     },
-    Vertex3DColor {
+    Vertex3DTexture2D {
         position: [-0.5, 0.5, 0.0],
-        color: [0.0, 1.0, 0.0],
+        texture: [1.0, 1.0],
     },
 ];
+
+/// The indices of the rectangle
+static INDICES: [u16; 6] = [0, 1, 2, 2, 3, 0];
 
 fn main() {
     env_logger::builder()
@@ -40,7 +48,7 @@ fn main() {
     let window = Window::new(
         &mut engine,
         WindowInfo {
-            title: "Amethyst rotating triangle",
+            title: "Amethyst textured rectangle",
             ..Default::default()
         },
     );
@@ -81,14 +89,21 @@ fn main() {
     // we create a descriptor set layout with only one binding.
     let descriptor_layout = DescriptorSetLayout::new(
         Arc::clone(&device),
-        &[DescriptorSetLayoutBinding {
-            descriptor_type: DescriptorType::Uniform,
-            shader_stages: ShaderStages::VERTEX,
-            binding: 0,
-        }],
+        &[
+            DescriptorSetLayoutBinding {
+                descriptor_type: DescriptorType::Uniform,
+                shader_stages: ShaderStages::VERTEX,
+                binding: 0,
+            },
+            DescriptorSetLayoutBinding {
+                descriptor_type: DescriptorType::Sampler,
+                shader_stages: ShaderStages::FRAGMENT,
+                binding: 1,
+            },
+        ],
     );
 
-    let pipeline = Pipeline::new::<Vertex3DColor>(
+    let pipeline = Pipeline::new::<Vertex3DTexture2D>(
         Arc::clone(&device),
         &swapchain,
         PipelineCreateInfo {
@@ -97,7 +112,7 @@ fn main() {
                     Arc::clone(&device),
                     ShaderCompileInfo {
                         language: ShaderSourceType::GLSL,
-                        source: ShaderSource::File("examples/shaders/rotating.vert"),
+                        source: ShaderSource::File("examples/shaders/texture.vert"),
                         kind: ShaderType::Vertex,
                         ..Default::default()
                     },
@@ -106,7 +121,7 @@ fn main() {
                     Arc::clone(&device),
                     ShaderCompileInfo {
                         language: ShaderSourceType::GLSL,
-                        source: ShaderSource::File("examples/shaders/rotating.frag"),
+                        source: ShaderSource::File("examples/shaders/texture.frag"),
                         kind: ShaderType::Fragment,
                         ..Default::default()
                     },
@@ -130,7 +145,7 @@ fn main() {
     // matrices that will be passed to the shaders.
     let camera = Camera::new(CameraCreateInfo {
         direction: glm::vec3(0.0, 0.0, 0.0),
-        position: glm::vec3(1.0, 1.0, 1.0),
+        position: glm::vec3(0.5, 0.5, 0.5),
         height: height,
         width: width,
         ..Default::default()
@@ -148,7 +163,7 @@ fn main() {
         SubBufferCreateInfo::UNIFORM,
     );
 
-    // Create a buffer to store the vertices of the triangle.
+    // Create a buffer to store the vertices of the rectangle.
     let vertices_buffer = SubBuffer::new(
         Arc::clone(&device),
         &VERTICES,
@@ -156,24 +171,76 @@ fn main() {
         SubBufferCreateInfo::STATIC_RENDERING,
     );
 
-    // Create a descriptor pool to allocate the descriptor sets.
+    // Create a buffer to store the indices of the rectangle.
+    let indices_buffer = SubBuffer::new(
+        Arc::clone(&device),
+        &INDICES,
+        BufferKind::Indices,
+        SubBufferCreateInfo::STATIC_RENDERING,
+    );
+
+    let (image, width, height) = load_image();
+    let texture = Image::new(
+        Arc::clone(&device),
+        ImageCreateInfo {
+            usage: ImageUsage::SAMPLED | ImageUsage::TRANSFER_DST,
+            format: ImageFormat::R8G8B8A8SRGB,
+            extent: Extent2D {
+                height: height,
+                width: width,
+            },
+            data: &image,
+        },
+    );
+
+    let texture_view = ImageView::new(
+        Arc::clone(&device),
+        &texture,
+        ImageViewCreateInfo {
+            subresource: ImageSubResourceRange {
+                aspect_mask: ImageAspectFlags::COLOR,
+                base_array_layer: 0,
+                base_mip_level: 0,
+                level_count: 1,
+                layer_count: 1,
+            },
+            format: ImageFormat::R8G8B8A8SRGB,
+            kind: ImageViewKind::Type2D,
+        },
+    );
+
+    let teture_sampler = ImageSampler::new(Arc::clone(&device), ImageSamplerCreatInfo {});
+
+    // Create a descriptor pool to allocate the descriptor sets, and create
+    // a descriptor set from the descriptor pool with the uniform data buffer.
     let descriptor_pool = Arc::new(DescriptorPool::new(
         Arc::clone(&device),
-        &[DescriptorPoolCreateInfo {
-            descriptor_type: DescriptorType::Uniform,
-            descriptor_count: swapchain.images().len() as u32,
-            ..Default::default()
-        }],
+        &[
+            DescriptorPoolCreateInfo {
+                descriptor_count: swapchain.images().len() as u32,
+                descriptor_type: DescriptorType::Uniform,
+            },
+            DescriptorPoolCreateInfo {
+                descriptor_count: swapchain.images().len() as u32,
+                descriptor_type: DescriptorType::Sampler,
+            },
+        ],
     ));
 
-    // Create and update the descriptor set with the new uniform buffer.
     let descriptor_set = DescriptorSet::new(Arc::clone(&device), descriptor_pool, &pipeline);
+
     descriptor_set.update_buffer(0, &uniform_buffer);
+    descriptor_set.update_image(
+        1,
+        ImageDescriptorInfo {
+            layout: ImageLayout::ShaderReadOnlyOptimal,
+            sampler: &teture_sampler,
+            view: &texture_view,
+        },
+    );
 
     let acquire_semaphore = Semaphore::new(Arc::clone(&device));
     let render_semaphore = Semaphore::new(Arc::clone(&device));
-
-    let start = std::time::Instant::now();
 
     window.run(engine, move |_, event| {
         match event {
@@ -181,12 +248,6 @@ fn main() {
                 let image_index = swapchain.acquire_image_index(&acquire_semaphore);
                 let image_view = &swapchain.images_views()[image_index as usize];
                 let image = &swapchain.images()[image_index as usize];
-
-                let model = glm::rotate(
-                    &glm::identity(),
-                    start.elapsed().as_secs_f32() * glm::radians(&glm::vec1(90.0))[0],
-                    &glm::vec3(0.0, 1.0, 0.0),
-                );
 
                 // Create a new command buffer from the command pool.
                 let command = Command::new(
@@ -204,7 +265,7 @@ fn main() {
                         &uniform_buffer,
                         &[UniformData {
                             projection: camera.projection().clone(),
-                            model: model,
+                            model: glm::identity(),
                             view: camera.view(),
                         }],
                     )
@@ -222,6 +283,7 @@ fn main() {
                     })
                     .bind_graphics_pipeline(&pipeline)
                     .bind_vertex_buffers(&vertices_buffer)
+                    .bind_indices_buffers(&indices_buffer, IndicesType::U16)
                     .bind_descriptor_sets(&pipeline, &[&descriptor_set])
                     .start_rendering(RenderingInfo {
                         render_area: swapchain.extent(),
@@ -234,11 +296,11 @@ fn main() {
                         }],
                         depth_attachement: None,
                     })
-                    .draw(DrawCommandInfo {
-                        vertex_count: VERTICES.len() as u32,
+                    .draw_indexed(DrawIndexedCommandInfo {
+                        index_count: INDICES.len() as u32,
                         instance_count: 1,
                         first_instance: 0,
-                        first_vertex: 0,
+                        first_index: 0,
                     })
                     .end_rendering()
                     .pipeline_barrier(PipelineBarrierInfo {
@@ -282,4 +344,23 @@ fn main() {
             WindowEvent::Exit => Status::Exit,
         }
     })
+}
+
+fn load_image() -> (Vec<u8>, u32, u32) {
+    let file =
+        std::fs::File::open("examples/resources/texture.png").expect("Failed to open PNG file");
+
+    let decoder = png::Decoder::new(file);
+    let mut reader = decoder
+        .read_info()
+        .expect("Failed to read PNG info");
+
+    let mut pixels = vec![0; reader.info().raw_bytes()];
+
+    reader
+        .next_frame(&mut pixels)
+        .expect("Failed to read PNG pixels");
+
+    let (width, height) = reader.info().size();
+    (pixels, width, height)
 }

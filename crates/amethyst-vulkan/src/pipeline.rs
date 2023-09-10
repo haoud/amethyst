@@ -2,7 +2,7 @@ use crate::{
     buffer::{VertexAttributeDescription, VertexBindingDescription},
     descriptor::DescriptorSetLayout,
     device::RenderDevice,
-    prelude::Swapchain,
+    prelude::{ImageFormat, Swapchain},
     shader::{Shader, ShaderType},
 };
 use bitflags::bitflags;
@@ -143,10 +143,19 @@ impl Pipeline {
             .attachments(attachments)
             .build();
 
+        let depth_stencil_state = vk::PipelineDepthStencilStateCreateInfo::builder()
+            .depth_bounds_test_enable(false)
+            .depth_write_enable(info.depth_write)
+            .depth_test_enable(info.depth_test)
+            .depth_compare_op(vk::CompareOp::LESS)
+            .stencil_test_enable(false)
+            .build();
+
         // Create the rendering info struct, since we use dynamic rendering
         // which is not included in the base pipeline create info struct.
         let format = [swapchain.format().format.into()];
         let mut rendering_info = vk::PipelineRenderingCreateInfo::builder()
+            .depth_attachment_format(info.depth_format.into())
             .color_attachment_formats(&format)
             .build();
 
@@ -154,6 +163,7 @@ impl Pipeline {
         let creat_info = vk::GraphicsPipelineCreateInfo::builder()
             .input_assembly_state(&input_assembly_state)
             .rasterization_state(&rasterization_state)
+            .depth_stencil_state(&depth_stencil_state)
             .vertex_input_state(&vertex_input_state)
             .multisample_state(&multisample_state)
             .color_blend_state(&color_blend_state)
@@ -234,6 +244,15 @@ pub struct PipelineCreateInfo {
 
     /// The cull mode to use for the pipeline. Defaults to `CullMode::Back`.
     pub cull_mode: CullMode,
+
+    /// The format of the depth buffer. Defaults to `ImageFormat::D32SFLOAT`.
+    pub depth_format: ImageFormat,
+
+    /// Whether or not to enable depth writing. Defaults to `false`.
+    pub depth_write: bool,
+
+    /// Whether or not to enable depth testing. Defaults to `false`.
+    pub depth_test: bool,
 }
 
 impl Default for PipelineCreateInfo {
@@ -243,6 +262,9 @@ impl Default for PipelineCreateInfo {
             front_face: FrontFace::CounterClockwise,
             cull_mode: CullMode::Back,
             fill_mode: FillMode::Fill,
+            depth_format: ImageFormat::D32SFLOAT,
+            depth_write: false,
+            depth_test: false,
             shaders: Vec::new(),
         }
     }
