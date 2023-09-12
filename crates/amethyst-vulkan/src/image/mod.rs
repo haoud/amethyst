@@ -13,12 +13,15 @@ use crate::{
     },
     device::RenderDevice,
     prelude::{PipelineStage, QueueSubmitInfo},
-    surface::{Extent2D, Extent3D},
 };
 
 use self::{sampler::ImageSampler, view::ImageView};
 
+/// An image format. This is a redefinition of the `Format` enum
+pub type ImageFormat = crate::format::Format;
+
 pub mod sampler;
+pub mod surface;
 pub mod view;
 
 /// An image
@@ -251,33 +254,6 @@ pub enum ImageMemory {
     Undefined,
 }
 
-pub enum ImageFormat {
-    R8G8B8A8SRGB,
-    B8G8R8A8SRGB,
-    D32SFLOAT,
-}
-
-impl From<ImageFormat> for vk::Format {
-    fn from(value: ImageFormat) -> Self {
-        match value {
-            ImageFormat::R8G8B8A8SRGB => vk::Format::R8G8B8A8_SRGB,
-            ImageFormat::B8G8R8A8SRGB => vk::Format::B8G8R8A8_SRGB,
-            ImageFormat::D32SFLOAT => vk::Format::D32_SFLOAT,
-        }
-    }
-}
-
-impl From<vk::Format> for ImageFormat {
-    fn from(value: vk::Format) -> Self {
-        match value {
-            vk::Format::R8G8B8A8_SRGB => Self::R8G8B8A8SRGB,
-            vk::Format::B8G8R8A8_SRGB => Self::B8G8R8A8SRGB,
-            vk::Format::D32_SFLOAT => Self::D32SFLOAT,
-            _ => panic!("Unsupported image format"),
-        }
-    }
-}
-
 bitflags! {
     #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
     pub struct ImageAspectFlags : u32 {
@@ -387,6 +363,59 @@ impl Default for ImageCreateInfo<'_> {
             },
             usage: ImageUsage::SAMPLED | ImageUsage::TRANSFER_DST,
             data: &[],
+        }
+    }
+}
+
+// An 2D extent
+#[derive(Default, Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct Extent2D {
+    pub height: u32,
+    pub width: u32,
+}
+
+impl From<vk::Extent2D> for Extent2D {
+    fn from(extent: vk::Extent2D) -> Self {
+        Self {
+            height: extent.height,
+            width: extent.width,
+        }
+    }
+}
+
+impl From<Extent2D> for vk::Extent2D {
+    fn from(extent: Extent2D) -> Self {
+        Self {
+            height: extent.height,
+            width: extent.width,
+        }
+    }
+}
+
+// An 3D extent
+#[derive(Default, Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct Extent3D {
+    pub height: u32,
+    pub width: u32,
+    pub depth: u32,
+}
+
+impl From<vk::Extent3D> for Extent3D {
+    fn from(extent: vk::Extent3D) -> Self {
+        Self {
+            height: extent.height,
+            width: extent.width,
+            depth: extent.depth,
+        }
+    }
+}
+
+impl From<Extent3D> for vk::Extent3D {
+    fn from(extent: Extent3D) -> Self {
+        Self {
+            height: extent.height,
+            width: extent.width,
+            depth: extent.depth,
         }
     }
 }

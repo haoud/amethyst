@@ -23,12 +23,12 @@ pub mod buffer;
 pub mod command;
 pub mod descriptor;
 pub mod device;
+pub mod format;
 pub mod image;
 pub mod pipeline;
 pub mod prelude;
 pub mod queue;
 pub mod shader;
-pub mod surface;
 pub mod swapchain;
 pub mod sync;
 

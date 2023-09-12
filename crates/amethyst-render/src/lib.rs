@@ -31,14 +31,14 @@ unsafe impl VertexAttributeDescription for Vertex2DColor {
         vec![
             // Describe the position attribute.
             AttributeDescription {
-                format: Format::R32G32Sfloat,
+                format: Format::R32G32SFLOAT,
                 location: 0,
                 binding: 0,
                 offset: 0,
             },
             // Describe the color attribute.
             AttributeDescription {
-                format: Format::R32G32B32Sfloat,
+                format: Format::R32G32B32SFLOAT,
                 location: 1,
                 binding: 0,
                 offset: 8,
@@ -68,14 +68,14 @@ unsafe impl VertexAttributeDescription for Vertex3DColor {
         vec![
             // Describe the position attribute.
             AttributeDescription {
-                format: Format::R32G32B32Sfloat,
+                format: Format::R32G32B32SFLOAT,
                 location: 0,
                 binding: 0,
                 offset: 0,
             },
             // Describe the color attribute.
             AttributeDescription {
-                format: Format::R32G32B32Sfloat,
+                format: Format::R32G32B32SFLOAT,
                 location: 1,
                 binding: 0,
                 offset: 12,
@@ -105,14 +105,14 @@ unsafe impl VertexAttributeDescription for Vertex3DTexture2D {
         vec![
             // Describe the position attribute.
             AttributeDescription {
-                format: Format::R32G32B32Sfloat,
+                format: Format::R32G32B32SFLOAT,
                 location: 0,
                 binding: 0,
                 offset: 0,
             },
             // Describe the color attribute.
             AttributeDescription {
-                format: Format::R32G32Sfloat,
+                format: Format::R32G32SFLOAT,
                 location: 1,
                 binding: 0,
                 offset: 12,

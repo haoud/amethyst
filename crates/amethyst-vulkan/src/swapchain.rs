@@ -1,7 +1,7 @@
 use crate::{
     device::RenderDevice,
-    prelude::{Image, ImageMemory, ImageView, ImageViewCreateInfo},
-    surface::{ColorSpace, Extent2D, Format},
+    image::surface::ColorSpace,
+    prelude::{Extent2D, Image, ImageFormat, ImageMemory, ImageView, ImageViewCreateInfo},
     sync::Semaphore,
     Vulkan,
 };
@@ -235,7 +235,7 @@ pub struct SwapchainCreatInfo {
 
     /// The format of the swapchain. If not specified or not supported, the
     /// swapchain will be created with the best supported format.
-    pub format: Format,
+    pub format: ImageFormat,
 }
 
 impl Default for SwapchainCreatInfo {
@@ -244,7 +244,7 @@ impl Default for SwapchainCreatInfo {
             sharing_mode: SharingMode::Exclusive,
             present_mode: PresentMode::default(),
             color_space: ColorSpace::SrgbNonLinear,
-            format: Format::R8G8B8A8Srgb,
+            format: ImageFormat::R8G8B8A8SRGB,
             images_count: 1,
             extent: None,
         }
@@ -279,7 +279,7 @@ impl SwapchainSupport {
                 .expect("Failed to query surface formats")
                 .into_iter()
                 .map(|format| SwapchainFormat::from(format))
-                .filter(|format| format.format != Format::Undefined)
+                .filter(|format| format.format != ImageFormat::Undefined)
                 .filter(|format| format.color_space != ColorSpace::Undefined)
                 .collect::<HashSet<_>>()
                 .into_iter()
@@ -377,7 +377,7 @@ impl SwapchainSupport {
         self.formats
             .iter()
             .find(|format| {
-                format.format == Format::R8G8B8A8Srgb
+                format.format == ImageFormat::R8G8B8A8SRGB
                     && format.color_space == ColorSpace::SrgbNonLinear
             })
             .copied()
@@ -526,7 +526,7 @@ impl From<vk::SharingMode> for SharingMode {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct SwapchainFormat {
     pub color_space: ColorSpace,
-    pub format: Format,
+    pub format: ImageFormat,
 }
 
 impl From<vk::SurfaceFormatKHR> for SwapchainFormat {

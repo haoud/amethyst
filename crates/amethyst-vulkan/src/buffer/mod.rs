@@ -1,4 +1,4 @@
-use crate::{device::RenderDevice, surface::Format};
+use crate::{device::RenderDevice, prelude::ImageFormat};
 use std::{mem::ManuallyDrop, sync::Arc};
 use vk_mem_vulkanalia::{Allocation, AllocationCreateFlags, AllocationCreateInfo, MemoryUsage};
 use vulkanalia::{prelude::v1_2::*, vk::BufferUsageFlags};
@@ -173,7 +173,7 @@ impl From<BindingDescription> for vk::VertexInputBindingDescription {
 pub struct AttributeDescription {
     /// The format of the vertex attribute data. This is the size and type of
     /// the vertex attribute data.
-    pub format: Format,
+    pub format: ImageFormat,
 
     /// The shader input location number for this attribute.
     pub location: u32,

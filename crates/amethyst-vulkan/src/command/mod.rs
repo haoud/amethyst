@@ -3,10 +3,9 @@ use crate::{
     descriptor::DescriptorSet,
     device::RenderDevice,
     prelude::{
-        AttachmentLoadOp, AttachmentStoreOp, Image, ImageAccess, ImageLayout,
+        AttachmentLoadOp, AttachmentStoreOp, Extent2D, Extent3D, Image, ImageAccess, ImageLayout,
         ImageSubResourceLayer, ImageSubResourceRange, ImageView, Pipeline, PipelineStage,
     },
-    surface::{Extent2D, Extent3D},
 };
 use std::{marker::PhantomData, mem::ManuallyDrop, sync::Arc};
 use vulkanalia::{prelude::v1_2::*, vk::DeviceV1_3};
