@@ -1,4 +1,9 @@
-//! This example shows how to render a simple triangle to the screen.
+//! This example shows how to render a simple triangle to the screen. This
+//! is the most basic example, and it is useful to understand how the engine
+//! works.
+//! This is the most detailed example, to show all the steps needed to render
+//! a triangle. In the other examples, not all steps are documented, especially
+//! the ones that are already documented in this example.
 pub use amethyst::prelude::*;
 use std::sync::Arc;
 
@@ -117,7 +122,11 @@ fn main() {
         },
     );
 
-    // Create a buffer to store the vertices of the triangle.
+    // Create a buffer to store the vertices of the triangle. We use a
+    // pre-defined configuration to create the buffer to simplify the
+    // example, but it is possible to create a buffer with a custom
+    // configuration (see the `SubBufferCreateInfo` documentation for
+    // more details)
     let vertices_buffer = SubBuffer::new(
         Arc::clone(&device),
         &VERTICES,
@@ -125,8 +134,8 @@ fn main() {
         SubBufferCreateInfo::STATIC_RENDERING,
     );
 
-    // Create a semaphore to make sure that the acquire operation is done
-    // before rendering to the image.
+    // Create a semaphore to make sure that the acquire operation of the
+    // swapchain image is done before rendering to this image.
     let acquire_semaphore = Semaphore::new(Arc::clone(&device));
 
     // Create a semaphore to make sure that the rendering is done before
@@ -140,6 +149,9 @@ fn main() {
     window.run(engine, move |_, event| {
         match event {
             WindowEvent::MainLoop => {
+                // Acquire an image from the swapchain. This will block until an image
+                // is available, and return the index of the image in the swapchain.
+                // From this index, we can get the image view and the image itself.
                 let image_index = swapchain.acquire_image_index(&acquire_semaphore);
                 let image_view = &swapchain.images_views()[image_index as usize];
                 let image = &swapchain.images()[image_index as usize];
@@ -152,13 +164,16 @@ fn main() {
                     },
                 );
 
-                // Record the command buffer.
+                // Record the command buffer. The recording is done each frame, but in
+                // this case, it could be done only once before the main loop because
+                // the command buffer is pretty much static and does not change across
+                // frames.
                 let command = command
                     .start_recording()
                     // We must transition the image format manually, because the image acquired
-                    // from the swapchain is not guaranteed to have the format that we want.
-                    // Here, we want to render to the image, so we must transition it to the
-                    // `ColorAttachmentOptimal` layout.
+                    // from the swapchain is not guaranteed to have the format that we want during
+                    // the rendering. We must transition it to the `ColorAttachmentOptimal` layout
+                    // to correctly render to it.
                     .pipeline_barrier(PipelineBarrierInfo {
                         src_stage_mask: PipelineStage::TOP_OF_PIPE,
                         dst_stage_mask: PipelineStage::COLOR_ATTACHMENT_OUTPUT,
@@ -173,8 +188,7 @@ fn main() {
                     })
                     .bind_graphics_pipeline(&pipeline)
                     .bind_vertex_buffers(&vertices_buffer)
-                    // Start the rendering inside the image given by the
-                    // swapchain.
+                    // Start the rendering inside the image given by the swapchain.
                     .start_rendering(RenderingInfo {
                         render_area: swapchain.extent(),
                         colors_attachements: vec![RenderingAttachementInfo {
@@ -186,7 +200,7 @@ fn main() {
                         }],
                         depth_attachement: None,
                     })
-                    // Draw the triangle.
+                    // Draw the triangle using the vertices buffer.
                     .draw(DrawCommandInfo {
                         vertex_count: VERTICES.len() as u32,
                         instance_count: 1,
@@ -197,8 +211,8 @@ fn main() {
                     // Here, must must again transition the image format: this time,
                     // the image has the ColorAttachmentOptimal layout, but in order
                     // to be able to present the image to the swapchain, it must be
-                    // in the PresentSrcKhr layout. So we transition the image to
-                    // this layout.
+                    // in the PresentSrcKhr layout. So we transition again the image
+                    // to this layout.
                     .pipeline_barrier(PipelineBarrierInfo {
                         src_stage_mask: PipelineStage::COLOR_ATTACHMENT_OUTPUT,
                         dst_stage_mask: PipelineStage::BOTTOM_OF_PIPE,

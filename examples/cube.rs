@@ -1,7 +1,10 @@
+//! This example shows how to render a 3D cube with Amethyst. It use many
+//! different features of Amethyst, but the good news is that you have
+//! touched the most important features of Amethyst, and you can now start
+//! to create your own application.
 pub use amethyst::prelude::*;
 use std::sync::Arc;
 
-/// The uniform object that will be passed to the vertex shader.
 #[derive(Debug, Clone)]
 #[repr(C)]
 struct UniformData {
@@ -13,7 +16,7 @@ struct UniformData {
 /// The vertices of the cube. We need to duplicate the vertices because
 /// each vertex can have only one color. If we don't duplicate them, it
 /// will be impossible to have a cube with different colors on each face,
-/// and the cube will have a ugly gradient color (trust me).
+/// and the cube will have faces with a ugly gradient color (trust me).
 static VERTICES: [Vertex3DColor; 24] = [
     // Front face
     Vertex3DColor {
@@ -307,7 +310,6 @@ fn main() {
 
     let acquire_semaphore = Semaphore::new(Arc::clone(&device));
     let render_semaphore = Semaphore::new(Arc::clone(&device));
-
     let start = std::time::Instant::now();
 
     window.run(engine, move |_, event| {
@@ -323,7 +325,6 @@ fn main() {
                     &glm::vec3(1.0, 1.0, 0.0),
                 );
 
-                // Create a new command buffer from the command pool.
                 let command = Command::new(
                     Arc::clone(&device),
                     CommandCreateInfo {
@@ -331,10 +332,8 @@ fn main() {
                     },
                 );
 
-                // Record the command buffer.
                 let command = command
                     .start_recording()
-                    // Update the uniform buffer with the new model matrix.
                     .update_buffer(
                         &uniform_buffer,
                         &[UniformData {
@@ -355,6 +354,10 @@ fn main() {
                             image: image,
                         }],
                     })
+                    // Transition the depth buffer from an undefined layout to a
+                    // depth attachment layout, and specify that we will read and
+                    // write to the depth buffer during the EARLY_FRAGMENT_TESTS
+                    // pipeline stage.
                     .pipeline_barrier(PipelineBarrierInfo {
                         src_stage_mask: PipelineStage::TOP_OF_PIPE,
                         dst_stage_mask: PipelineStage::EARLY_FRAGMENT_TESTS,
@@ -384,6 +387,9 @@ fn main() {
                             store_op: AttachmentStoreOp::Store,
                             clear_value: ClearValue::Color([0.0, 0.0, 0.0, 1.0]),
                         }],
+                        // Attach the depth buffer to the rendering. The depth buffer
+                        // will be cleared before the rendering with the specified clear
+                        // value below (1.0).
                         depth_attachement: Some(RenderingAttachementInfo {
                             image_view: &depth_view,
                             image_layout: ImageLayout::DepthStencilAttachmentOptimal,

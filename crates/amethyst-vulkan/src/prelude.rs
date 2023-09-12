@@ -20,6 +20,7 @@ pub use crate::{
         RenderDevice, RenderDevicePickInfo,
     },
     image::{
+        sampler::{ImageSampler, ImageSamplerCreatInfo},
         view::{ImageView, ImageViewCreateInfo, ImageViewKind},
         Image, ImageAccess, ImageAspectFlags, ImageCreateInfo, ImageDescriptorInfo, ImageFormat,
         ImageLayout, ImageMemory, ImageSubResourceLayer, ImageSubResourceRange, ImageUsage,

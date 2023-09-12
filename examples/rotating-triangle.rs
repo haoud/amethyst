@@ -1,7 +1,12 @@
+//! This example shows how to create a rotating 2D triangle using Amethyst.
 pub use amethyst::prelude::*;
 use std::sync::Arc;
 
-/// The uniform object that will be passed to the vertex shader.
+/// The uniform object that will be passed to the vertex shader. It MUST
+/// use the `repr(C)` attribute to have a fixed layout in memory and be
+/// compatible with the shader. When creating an uniform buffer, you
+/// must also take care of the alignment of the data that the shader
+/// expects.
 #[derive(Debug, Clone)]
 #[repr(C)]
 struct UniformData {
@@ -182,13 +187,13 @@ fn main() {
                 let image_view = &swapchain.images_views()[image_index as usize];
                 let image = &swapchain.images()[image_index as usize];
 
+                // Rotate the triangle around the Y axis.
                 let model = glm::rotate(
                     &glm::identity(),
                     start.elapsed().as_secs_f32() * glm::radians(&glm::vec1(90.0))[0],
                     &glm::vec3(0.0, 1.0, 0.0),
                 );
 
-                // Create a new command buffer from the command pool.
                 let command = Command::new(
                     Arc::clone(&device),
                     CommandCreateInfo {
@@ -196,7 +201,6 @@ fn main() {
                     },
                 );
 
-                // Record the command buffer.
                 let command = command
                     .start_recording()
                     // Update the uniform buffer with the new model matrix.

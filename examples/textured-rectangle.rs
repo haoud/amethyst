@@ -1,8 +1,8 @@
+//! This example shows how to draw a textured rectangle by loading an image
+//! from the disk and using it as a texture.
 pub use amethyst::prelude::*;
-use amethyst_internal::vulkan::image::sampler::{ImageSampler, ImageSamplerCreatInfo};
 use std::sync::Arc;
 
-/// The uniform object that will be passed to the vertex shader.
 #[derive(Debug, Clone)]
 #[repr(C)]
 struct UniformData {
@@ -84,17 +84,18 @@ fn main() {
     let height = swapchain.extent().height as f32;
     let width = swapchain.extent().width as f32;
 
-    // Create a descriptor set layout to describe the data that will be
-    // passed to the shaders. Here, we only pass one uniform buffer, so
-    // we create a descriptor set layout with only one binding.
     let descriptor_layout = DescriptorSetLayout::new(
         Arc::clone(&device),
         &[
+            // The uniform buffer, located at binding 0 and used by the
+            // vertex shader.
             DescriptorSetLayoutBinding {
                 descriptor_type: DescriptorType::Uniform,
                 shader_stages: ShaderStages::VERTEX,
                 binding: 0,
             },
+            // The texture sampler, located at binding 1 and used by the
+            // fragment shader.
             DescriptorSetLayoutBinding {
                 descriptor_type: DescriptorType::Sampler,
                 shader_stages: ShaderStages::FRAGMENT,
@@ -128,21 +129,12 @@ fn main() {
                 ),
             ],
 
-            // The descriptor set layout is used to describe the data that
-            // will be passed to the shaders. Here, we only pass the uniform
-            // data, so we only need one descriptor set layout.
             descriptor_set_layouts: vec![descriptor_layout],
-
-            // Disable the culling of the back faces of the triangle. This
-            // is necessary because the triangle is rotating, and we want
-            // to see all the faces
             cull_mode: CullMode::None,
             ..Default::default()
         },
     );
 
-    // Create a camera. The camera is used to create the view and projection
-    // matrices that will be passed to the shaders.
     let camera = Camera::new(CameraCreateInfo {
         direction: glm::vec3(0.0, 0.0, 0.0),
         position: glm::vec3(0.5, 0.5, 0.5),
@@ -151,7 +143,6 @@ fn main() {
         ..Default::default()
     });
 
-    // Create a buffer to store the uniform data.
     let uniform_buffer = SubBuffer::new(
         Arc::clone(&device),
         &[UniformData {
@@ -163,7 +154,6 @@ fn main() {
         SubBufferCreateInfo::UNIFORM,
     );
 
-    // Create a buffer to store the vertices of the rectangle.
     let vertices_buffer = SubBuffer::new(
         Arc::clone(&device),
         &VERTICES,
@@ -171,7 +161,6 @@ fn main() {
         SubBufferCreateInfo::STATIC_RENDERING,
     );
 
-    // Create a buffer to store the indices of the rectangle.
     let indices_buffer = SubBuffer::new(
         Arc::clone(&device),
         &INDICES,
@@ -346,6 +335,7 @@ fn main() {
     })
 }
 
+/// Loads the image from the disk and returns the pixels, width and height.
 fn load_image() -> (Vec<u8>, u32, u32) {
     let file =
         std::fs::File::open("examples/resources/texture.png").expect("Failed to open PNG file");
