@@ -149,16 +149,22 @@ fn main() {
             model: glm::identity(),
             view: camera.projection().clone(),
         }],
-        BufferKind::Uniforms,
-        SubBufferCreateInfo::UNIFORM,
+        SubBufferCreateInfo {
+            usage: BufferUsageInfo::UNIFORM,
+            kind: BufferKind::Uniforms,
+            ..Default::default()
+        },
     );
 
     // Create a buffer to store the vertices of the triangle.
     let vertices_buffer = SubBuffer::new(
         Arc::clone(&device),
         &VERTICES,
-        BufferKind::Vertices,
-        SubBufferCreateInfo::STATIC_RENDERING,
+        SubBufferCreateInfo {
+            usage: BufferUsageInfo::STATIC_RENDERING,
+            kind: BufferKind::Vertices,
+            ..Default::default()
+        },
     );
 
     // Create a descriptor pool to allocate the descriptor sets.

@@ -3,32 +3,37 @@ use crate::{
     device::RenderDevice,
     prelude::QueueSubmitInfo,
 };
-use std::{marker::PhantomData, mem::ManuallyDrop, sync::Arc};
-use vk_mem_vulkanalia::{Alloc, AllocationCreateFlags, AllocationCreateInfo};
+use std::{marker::PhantomData, sync::Arc};
 use vulkanalia::prelude::v1_2::*;
 
-use super::{Buffer, BufferAccessMode, BufferKind, BufferMemoryLocation, BufferTransfert};
+use super::{Buffer, BufferCreateInfo, BufferKind, BufferMemoryLocation, BufferUsageInfo};
 
 /// A sub buffer.
-pub struct SubBuffer<T: ?Sized> {
+pub struct SubBuffer<T> {
+    /// The type of the objects in the buffer.
     marker: PhantomData<T>,
-    info: SubBufferCreateInfo,
-    buffer: Buffer,
+
+    /// The underlying buffer.
+    buffer: Arc<Buffer>,
+
+    /// The starting offset of the sub buffer in the buffer, in bytes.
     offset: usize,
-    size: usize,
+
+    /// The number of objects of type `T` in the buffer.
+    count: usize,
 }
 
 impl<T: Sized> SubBuffer<T> {
     /// Create a new buffer. The buffer will be allocated using the buffer allocator
     /// of the logical device.
+    ///
+    /// The count field of the sub buffer create info is overwritten by the length of
+    /// the data passed as argument.
     #[must_use]
-    pub fn new(
-        device: Arc<RenderDevice>,
-        data: &[T],
-        kind: BufferKind,
-        info: SubBufferCreateInfo,
-    ) -> Self {
-        let buffer = Self::empty(device, data.len() * std::mem::size_of::<T>(), kind, info);
+    pub fn new(device: Arc<RenderDevice>, data: &[T], mut info: SubBufferCreateInfo<T>) -> Self {
+        info.count = data.len();
+        let buffer = Self::empty(device, info);
+
         buffer.update(SubBufferUpdateInfo { data });
         buffer
     }
@@ -36,52 +41,16 @@ impl<T: Sized> SubBuffer<T> {
     /// Create a new empty buffer. The buffer will be allocated using the buffer allocator
     /// of the logical device.
     #[must_use]
-    pub fn empty(
-        device: Arc<RenderDevice>,
-        size: usize,
-        kind: BufferKind,
-        info: SubBufferCreateInfo,
-    ) -> Self {
-        let mut create_info = AllocationCreateInfo::from(info.location);
-        create_info.flags |= AllocationCreateFlags::from(info.access);
+    pub fn empty(device: Arc<RenderDevice>, info: SubBufferCreateInfo<T>) -> Self {
+        let offset = 0;
+        let count = info.count;
 
-        if info.memory_type != 0 {
-            create_info = AllocationCreateInfo {
-                flags: AllocationCreateFlags::from(info.access),
-                memory_type_bits: info.memory_type,
-                ..Default::default()
-            };
-        }
-
-        let (buffer, allocation) = unsafe {
-            let transfert = vk::BufferUsageFlags::from(info.transfer);
-            let flags = vk::BufferUsageFlags::from(kind);
-
-            let buffer_create_info = vk::BufferCreateInfo::builder()
-                .usage(transfert | flags)
-                .size(size as u64)
-                .build();
-
-            device
-                .buffer_allocator()
-                .inner()
-                .create_buffer_with_alignment(&buffer_create_info, &create_info, 0x10000 as u64)
-                .expect("Failed to create buffer")
-        };
-
-        let buffer = Buffer {
-            allocation: ManuallyDrop::new(allocation),
-            device: Arc::clone(&device),
-            inner: buffer,
-            kind,
-        };
-
+        let buffer = Arc::new(Buffer::empty(device, BufferCreateInfo::from(info)));
         Self {
             marker: PhantomData,
-            offset: 0,
             buffer,
-            info,
-            size,
+            offset,
+            count,
         }
     }
 
@@ -94,7 +63,7 @@ impl<T: Sized> SubBuffer<T> {
     /// # Panics
     /// Panics if the size of the data is not equal to the size of the buffer.
     pub fn update(&self, info: SubBufferUpdateInfo<'_, T>) {
-        assert!(info.data.len() * std::mem::size_of::<T>() == self.size);
+        assert!(info.data.len() == self.count);
 
         let allocation_info = unsafe {
             self.buffer
@@ -106,7 +75,7 @@ impl<T: Sized> SubBuffer<T> {
         };
 
         unsafe {
-            match self.info.location {
+            match self.buffer.info.usage.location {
                 // The buffer is not host visible, so we need to create a staging
                 // buffer before copying the data to the device local memory.
                 BufferMemoryLocation::PreferDeviceLocal => {
@@ -114,8 +83,12 @@ impl<T: Sized> SubBuffer<T> {
                     let staging = SubBuffer::new(
                         Arc::clone(&self.buffer.device),
                         info.data,
-                        self.buffer.kind,
-                        SubBufferCreateInfo::STAGING,
+                        SubBufferCreateInfo {
+                            usage: BufferUsageInfo::STAGING,
+                            kind: self.buffer.info.kind,
+                            count: self.count,
+                            ..Default::default()
+                        },
                     );
 
                     // Create and record the command buffer to copy the data from the staging
@@ -130,7 +103,7 @@ impl<T: Sized> SubBuffer<T> {
                     let command = command
                         .start_recording()
                         .copy_buffer(CopyBufferInfo {
-                            size: self.size as u64,
+                            size: self.size() as u64,
                             src: &staging,
                             dst: &self,
                         })
@@ -167,8 +140,6 @@ impl<T: Sized> SubBuffer<T> {
     }
 }
 
-impl<T: ?Sized> SubBuffer<T> {}
-
 impl<T> SubBuffer<T> {
     /// Returns the inner Vulkan buffer.
     #[must_use]
@@ -176,102 +147,77 @@ impl<T> SubBuffer<T> {
         self.buffer.inner
     }
 
-    pub(crate) fn device_memory_offset(&self) -> u64 {
-        unsafe {
-            self.buffer
-                .device
-                .buffer_allocator()
-                .inner()
-                .get_allocation_info(&self.buffer.allocation)
-                .expect("Failed to get allocation info")
-                .offset
-        }
-    }
-
-    pub(crate) fn device_memory(&self) -> vk::DeviceMemory {
-        unsafe {
-            self.buffer
-                .device
-                .buffer_allocator()
-                .inner()
-                .get_allocation_info(&self.buffer.allocation)
-                .expect("Failed to get allocation info")
-                .device_memory
-        }
-    }
-
     /// Returns the offset of the sub buffer.
     pub fn offset(&self) -> usize {
         self.offset
     }
 
-    /// Returns the buffer create info.
-    pub fn info(&self) -> &SubBufferCreateInfo {
-        &self.info
+    /// Returns the underlying buffer.
+    pub fn buffer(&self) -> &Buffer {
+        &self.buffer
+    }
+
+    /// Returns the number of objects of type `T` in the buffer.
+    #[must_use]
+    pub fn count(&self) -> usize {
+        self.count
     }
 
     /// Returns the size of the sub buffer.
     #[must_use]
     pub fn size(&self) -> usize {
-        self.size
+        self.count * std::mem::size_of::<T>()
     }
 }
 
-/// A buffer create info.
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub struct SubBufferCreateInfo {
-    pub location: BufferMemoryLocation,
-    pub transfer: BufferTransfert,
-    pub access: BufferAccessMode,
-    pub memory_type: u32,
+impl From<Buffer> for SubBuffer<u8> {
+    fn from(buffer: Buffer) -> Self {
+        let count = buffer.info.size;
+        let offset = 0;
+
+        Self {
+            buffer: Arc::new(buffer),
+            marker: PhantomData,
+            offset,
+            count,
+        }
+    }
 }
 
-impl SubBufferCreateInfo {
-    /// A pre-defined buffer create info for static mesh rendering. This buffer
-    /// will be stored in device local memory and data will be copied to it once
-    /// using a staging buffer.
-    pub const STATIC_RENDERING: SubBufferCreateInfo = SubBufferCreateInfo {
-        location: BufferMemoryLocation::PreferDeviceLocal,
-        transfer: BufferTransfert::Destination,
-        access: BufferAccessMode::None,
-        memory_type: 0,
-    };
+pub struct SubBufferCreateInfo<T> {
+    /// The type of the objects in the buffer.
+    pub marker: PhantomData<T>,
 
-    /// A pre-defined buffer create info for creating a staging buffer. This
-    /// buffer will be stored in host visible memory and can be used to copy
-    /// data to device local memory.
-    pub const STAGING: SubBufferCreateInfo = SubBufferCreateInfo {
-        location: BufferMemoryLocation::PreferHostVisible,
-        transfer: BufferTransfert::Source,
-        access: BufferAccessMode::Sequential,
-        memory_type: 0,
-    };
+    /// The expected usage of the buffer. This allows the buffer allocator to
+    /// optimize the memory allocation, and some functionality requires specific
+    /// usage flags to be set (e.g. vulkan transfer operations).
+    pub usage: BufferUsageInfo,
 
-    /// A pre-defined buffer create info for creating a uniform buffer. This
-    /// buffer will be stored in host visible memory and can be used to update
-    /// the buffer data frequently.
-    pub const UNIFORM: SubBufferCreateInfo = SubBufferCreateInfo {
-        location: BufferMemoryLocation::PreferDeviceLocal,
-        transfer: BufferTransfert::Destination,
-        access: BufferAccessMode::Sequential,
-        memory_type: 0,
-    };
+    /// The kind of buffer to create.
+    pub kind: BufferKind,
 
-    pub const IMAGE: SubBufferCreateInfo = SubBufferCreateInfo {
-        location: BufferMemoryLocation::PreferDeviceLocal,
-        transfer: BufferTransfert::Destination,
-        access: BufferAccessMode::Sequential,
-        memory_type: 0,
-    };
+    /// The number of objects of type `T` in the buffer.
+    pub count: usize,
 }
 
-impl Default for SubBufferCreateInfo {
+impl<T> Default for SubBufferCreateInfo<T> {
     fn default() -> Self {
         Self {
-            location: BufferMemoryLocation::PreferDeviceLocal,
-            transfer: BufferTransfert::Destination,
-            access: BufferAccessMode::Sequential,
-            memory_type: 0,
+            marker: PhantomData,
+            usage: BufferUsageInfo::STATIC_RENDERING,
+            kind: BufferKind::None,
+            count: 0,
+        }
+    }
+}
+
+impl<T> From<SubBufferCreateInfo<T>> for BufferCreateInfo {
+    fn from(value: SubBufferCreateInfo<T>) -> Self {
+        Self {
+            size: value.count * std::mem::size_of::<T>(),
+            alignment: std::mem::align_of::<T>(),
+            usage: value.usage,
+            kind: value.kind,
         }
     }
 }

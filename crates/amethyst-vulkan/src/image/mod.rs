@@ -6,7 +6,8 @@ pub use vulkanalia::prelude::v1_2::*;
 use crate::{
     buffer::{
         subbuffer::{SubBuffer, SubBufferCreateInfo},
-        BufferAccessMode, BufferKind, BufferMemoryLocation, BufferTransfert,
+        Buffer, BufferAccessMode, BufferCreateInfo, BufferKind, BufferMemoryLocation,
+        BufferTransfert, BufferUsageInfo,
     },
     command::{
         Command, CommandCreateInfo, CopyBufferIntoImageInfo, ImageBarrier, PipelineBarrierInfo,
@@ -71,15 +72,18 @@ impl Image {
                 .get_image_memory_requirements(inner)
         };
 
-        let buffer = SubBuffer::empty(
+        let buffer = Buffer::empty(
             Arc::clone(&device),
-            memory_requirements.size as usize,
-            BufferKind::None,
-            SubBufferCreateInfo {
-                memory_type: memory_requirements.memory_type_bits,
-                location: BufferMemoryLocation::PreferHostVisible,
-                transfer: BufferTransfert::Destination,
-                access: BufferAccessMode::Sequential,
+            BufferCreateInfo {
+                usage: BufferUsageInfo {
+                    memory_type: memory_requirements.memory_type_bits,
+                    location: BufferMemoryLocation::PreferHostVisible,
+                    transfer: BufferTransfert::Destination,
+                    access: BufferAccessMode::Sequential,
+                },
+                alignment: memory_requirements.alignment as usize,
+                size: memory_requirements.size as usize,
+                kind: BufferKind::None,
             },
         );
 
@@ -96,12 +100,15 @@ impl Image {
         // undefined state.
         if !info.data.is_empty() {
             let image = Image::raw(inner, ImageMemory::Undefined);
-
             let staging = SubBuffer::new(
                 Arc::clone(&device),
                 info.data,
-                BufferKind::None,
-                SubBufferCreateInfo::STAGING,
+                SubBufferCreateInfo {
+                    usage: BufferUsageInfo::STAGING,
+                    kind: BufferKind::None,
+                    count: info.data.len(),
+                    ..Default::default()
+                },
             );
 
             let extent_3d = Extent3D {
@@ -164,7 +171,7 @@ impl Image {
         }
 
         Self {
-            memory: ImageMemory::Buffer(buffer),
+            memory: ImageMemory::Buffer(SubBuffer::from(buffer)),
             inner,
         }
     }

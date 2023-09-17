@@ -106,16 +106,22 @@ fn main() {
     let vertices_buffer = SubBuffer::new(
         Arc::clone(&device),
         &VERTICES,
-        BufferKind::Vertices,
-        SubBufferCreateInfo::STATIC_RENDERING,
+        SubBufferCreateInfo {
+            usage: BufferUsageInfo::STATIC_RENDERING,
+            kind: BufferKind::Vertices,
+            ..Default::default()
+        },
     );
 
     // Create a buffer to store the indices of the rectangle.
     let indices_buffer = SubBuffer::new(
         Arc::clone(&device),
         &INDICES,
-        BufferKind::Indices,
-        SubBufferCreateInfo::STATIC_RENDERING,
+        SubBufferCreateInfo {
+            usage: BufferUsageInfo::STATIC_RENDERING,
+            kind: BufferKind::Indices,
+            ..Default::default()
+        },
     );
 
     let acquire_semaphore = Semaphore::new(Arc::clone(&device));

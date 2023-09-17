@@ -2,8 +2,9 @@ pub use crate::{
     buffer::{
         allocator::BufferAllocator,
         subbuffer::{SubBuffer, SubBufferCreateInfo, SubBufferUpdateInfo},
-        AttributeDescription, BindingDescription, Buffer, BufferKind, BufferMemoryLocation,
-        VertexAttributeDescription, VertexBindingDescription,
+        AttributeDescription, BindingDescription, Buffer, BufferCreateInfo, BufferKind,
+        BufferMemoryLocation, BufferUsageInfo, VertexAttributeDescription,
+        VertexBindingDescription,
     },
     command::{
         pool::{CommandPool, CommandPoolCreateFlags},

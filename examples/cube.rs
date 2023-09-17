@@ -278,22 +278,31 @@ fn main() {
             model: glm::identity(),
             view: camera.projection().clone(),
         }],
-        BufferKind::Uniforms,
-        SubBufferCreateInfo::UNIFORM,
+        SubBufferCreateInfo {
+            usage: BufferUsageInfo::UNIFORM,
+            kind: BufferKind::Uniforms,
+            ..Default::default()
+        },
     );
 
     let vertices_buffer = SubBuffer::new(
         Arc::clone(&device),
         &VERTICES,
-        BufferKind::Vertices,
-        SubBufferCreateInfo::STATIC_RENDERING,
+        SubBufferCreateInfo {
+            usage: BufferUsageInfo::STATIC_RENDERING,
+            kind: BufferKind::Vertices,
+            ..Default::default()
+        },
     );
 
     let indices_buffer = SubBuffer::new(
         Arc::clone(&device),
         &INDICES,
-        BufferKind::Indices,
-        SubBufferCreateInfo::STATIC_RENDERING,
+        SubBufferCreateInfo {
+            usage: BufferUsageInfo::STATIC_RENDERING,
+            kind: BufferKind::Indices,
+            ..Default::default()
+        },
     );
 
     let descriptor_pool = Arc::new(DescriptorPool::new(
