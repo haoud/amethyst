@@ -142,9 +142,7 @@ pub struct FenceCreateFlags {
 
 impl Default for FenceCreateFlags {
     fn default() -> Self {
-        Self {
-            signaled: false,
-        }
+        Self { signaled: false }
     }
 }
 
@@ -157,7 +155,6 @@ impl From<FenceCreateFlags> for vk::FenceCreateFlags {
         flags
     }
 }
-
 
 /// The status of a fence.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]

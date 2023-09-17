@@ -44,7 +44,7 @@ pub enum ColorSpace {
     #[default]
     Undefined,
     SrgbNonLinear,
-} 
+}
 
 impl From<vk::ColorSpaceKHR> for ColorSpace {
     fn from(color_space: vk::ColorSpaceKHR) -> Self {

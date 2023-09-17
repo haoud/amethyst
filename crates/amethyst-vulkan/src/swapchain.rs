@@ -13,17 +13,16 @@ use vulkanalia::{
 };
 
 /// A swapchain. A swapchain provides the ability to present rendering
-/// results to a surface
+/// results to a surface.
 pub struct Swapchain {
     device: Arc<RenderDevice>,
-
-    images_views: Vec<ImageView>,
-    images: Vec<Image>,
 
     present_mode: PresentMode,
     format: SwapchainFormat,
     extent: Extent2D,
 
+    images_views: Vec<ImageView>,
+    images: Vec<Image>,
     inner: vk::SwapchainKHR,
 }
 
@@ -134,7 +133,8 @@ impl Swapchain {
     }
 
     /// Present an image to the swapchain and wait for the present to complete.
-    /// Before presenting the image, the `wait_semaphore` is waited on.
+    /// Before presenting the image, the `wait_semaphore` is waited on. After
+    /// presenting the image, this function will wait for the present to complete.
     pub fn present_image(&self, info: SwapchainPresentInfo) {
         let wait_semaphores = &[info.wait_semaphore.inner()];
         let image_indices = &[info.image_index];

@@ -300,7 +300,7 @@ fn main() {
         Arc::clone(&device),
         &[DescriptorPoolCreateInfo {
             descriptor_type: DescriptorType::Uniform,
-            descriptor_count: swapchain.images().len() as u32,
+            descriptor_count: 32,
             ..Default::default()
         }],
     ));

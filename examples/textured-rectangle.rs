@@ -198,7 +198,7 @@ fn main() {
         },
     );
 
-    let teture_sampler = ImageSampler::new(Arc::clone(&device), ImageSamplerCreatInfo {});
+    let texture_sampler = ImageSampler::new(Arc::clone(&device), ImageSamplerCreatInfo {});
 
     // Create a descriptor pool to allocate the descriptor sets, and create
     // a descriptor set from the descriptor pool with the uniform data buffer.
@@ -223,7 +223,7 @@ fn main() {
         1,
         ImageDescriptorInfo {
             layout: ImageLayout::ShaderReadOnlyOptimal,
-            sampler: &teture_sampler,
+            sampler: &texture_sampler,
             view: &texture_view,
         },
     );

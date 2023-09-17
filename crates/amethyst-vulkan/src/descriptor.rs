@@ -100,7 +100,7 @@ impl DescriptorSet {
     }
 
     /// Update the descriptor set with the given buffer. The buffer must have
-    /// the same size as the uniform variable.
+    /// exactly the same size as the uniform variable.
     pub fn update_buffer<T>(&self, binding: u32, buffer: &SubBuffer<T>) {
         let buffer_info = vk::DescriptorBufferInfo::builder()
             .range(buffer.size() as u64)
@@ -124,8 +124,7 @@ impl DescriptorSet {
         }
     }
 
-    /// Update the descriptor set with the given buffer. The buffer must have
-    /// the same size as the uniform variable.
+    /// Update the descriptor set with the given image view and sampler.
     pub fn update_image(&self, binding: u32, info: ImageDescriptorInfo) {
         let image_info = vk::DescriptorImageInfo::builder()
             .image_layout(info.layout.into())
@@ -149,6 +148,7 @@ impl DescriptorSet {
         }
     }
 
+    /// Returns the raw Vulkan handle of the descriptor set.
     pub(crate) fn inner(&self) -> vk::DescriptorSet {
         self.inner
     }
@@ -239,7 +239,9 @@ pub struct DescriptorPoolCreateInfo {
     /// The type of descriptor to allocate.
     pub descriptor_type: DescriptorType,
 
-    /// The number of descriptors of the specified type to allocate.
+    /// The number of descriptors of the specified type to allocate. If more
+    /// descriptors are allocated than the pool can handle, the allocation will
+    /// fail.
     pub descriptor_count: u32,
 }
 
@@ -252,9 +254,14 @@ impl Default for DescriptorPoolCreateInfo {
     }
 }
 
+/// The type of a descriptor.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum DescriptorType {
+    /// A sampler descriptor. This is used to sample textures in shaders.
     Sampler,
+
+    /// A uniform descriptor. This is used to pass uniform variables to shaders,
+    /// such as matrices, vectors, floats, etc.
     Uniform,
 }
 
