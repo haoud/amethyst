@@ -106,16 +106,22 @@ fn main() {
     let vertices_buffer = SubBuffer::new(
         Arc::clone(&device),
         &VERTICES,
-        BufferKind::Vertices,
-        SubBufferCreateInfo::STATIC_RENDERING,
+        SubBufferCreateInfo {
+            usage: BufferUsageInfo::STATIC_RENDERING,
+            kind: BufferKind::Vertices,
+            ..Default::default()
+        },
     );
 
     // Create a buffer to store the indices of the rectangle.
     let indices_buffer = SubBuffer::new(
         Arc::clone(&device),
         &INDICES,
-        BufferKind::Indices,
-        SubBufferCreateInfo::STATIC_RENDERING,
+        SubBufferCreateInfo {
+            usage: BufferUsageInfo::STATIC_RENDERING,
+            kind: BufferKind::Indices,
+            ..Default::default()
+        },
     );
 
     let acquire_semaphore = Semaphore::new(Arc::clone(&device));
@@ -135,7 +141,7 @@ fn main() {
                     },
                 );
 
-                let command = command
+                command
                     .start_recording()
                     .pipeline_barrier(PipelineBarrierInfo {
                         src_stage_mask: PipelineStage::TOP_OF_PIPE,
@@ -189,17 +195,14 @@ fn main() {
                             image: image,
                         }],
                     })
-                    .stop_recording();
-
-                // Submit the command buffer to the graphic queue.
-                device.graphic_queue().submit(
-                    &device,
-                    QueueSubmitInfo {
-                        signal_semaphore: &[&render_semaphore],
-                        wait_semaphore: &[&acquire_semaphore],
-                        commands: &[&command],
-                    },
-                );
+                    .stop_recording()
+                    .submit_to(
+                        device.graphic_queue(),
+                        CommandSubmitInfo {
+                            signal_semaphore: &[&render_semaphore],
+                            wait_semaphore: &[&acquire_semaphore],
+                        },
+                    );
 
                 // Present the image to the swapchain.
                 swapchain.present_image(SwapchainPresentInfo {

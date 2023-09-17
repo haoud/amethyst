@@ -278,29 +278,38 @@ fn main() {
             model: glm::identity(),
             view: camera.projection().clone(),
         }],
-        BufferKind::Uniforms,
-        SubBufferCreateInfo::UNIFORM,
+        SubBufferCreateInfo {
+            usage: BufferUsageInfo::UNIFORM,
+            kind: BufferKind::Uniforms,
+            ..Default::default()
+        },
     );
 
     let vertices_buffer = SubBuffer::new(
         Arc::clone(&device),
         &VERTICES,
-        BufferKind::Vertices,
-        SubBufferCreateInfo::STATIC_RENDERING,
+        SubBufferCreateInfo {
+            usage: BufferUsageInfo::STATIC_RENDERING,
+            kind: BufferKind::Vertices,
+            ..Default::default()
+        },
     );
 
     let indices_buffer = SubBuffer::new(
         Arc::clone(&device),
         &INDICES,
-        BufferKind::Indices,
-        SubBufferCreateInfo::STATIC_RENDERING,
+        SubBufferCreateInfo {
+            usage: BufferUsageInfo::STATIC_RENDERING,
+            kind: BufferKind::Indices,
+            ..Default::default()
+        },
     );
 
     let descriptor_pool = Arc::new(DescriptorPool::new(
         Arc::clone(&device),
         &[DescriptorPoolCreateInfo {
             descriptor_type: DescriptorType::Uniform,
-            descriptor_count: swapchain.images().len() as u32,
+            descriptor_count: 32,
             ..Default::default()
         }],
     ));
@@ -332,7 +341,7 @@ fn main() {
                     },
                 );
 
-                let command = command
+                command
                     .start_recording()
                     .update_buffer(
                         &uniform_buffer,
@@ -417,17 +426,14 @@ fn main() {
                             image: image,
                         }],
                     })
-                    .stop_recording();
-
-                // Submit the command buffer to the graphic queue.
-                device.graphic_queue().submit(
-                    &device,
-                    QueueSubmitInfo {
-                        signal_semaphore: &[&render_semaphore],
-                        wait_semaphore: &[&acquire_semaphore],
-                        commands: &[&command],
-                    },
-                );
+                    .stop_recording()
+                    .submit_to(
+                        device.graphic_queue(),
+                        CommandSubmitInfo {
+                            signal_semaphore: &[&render_semaphore],
+                            wait_semaphore: &[&acquire_semaphore],
+                        },
+                    );
 
                 // Present the image to the swapchain.
                 swapchain.present_image(SwapchainPresentInfo {

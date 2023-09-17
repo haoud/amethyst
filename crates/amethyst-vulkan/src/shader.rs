@@ -7,6 +7,7 @@ use vulkanalia::prelude::v1_2::*;
 pub struct Shader {
     device: Arc<RenderDevice>,
     inner: vk::ShaderModule,
+    entry: String,
     kind: ShaderType,
 }
 
@@ -56,10 +57,13 @@ impl Shader {
                 .expect("Failed to create the shader module")
         };
 
+        let entry = info.entry.to_owned() + "\0";
+
         Self {
-            device,
-            inner,
             kind: info.kind,
+            device,
+            entry,
+            inner,
         }
     }
 
@@ -67,6 +71,13 @@ impl Shader {
     #[must_use]
     pub(crate) fn inner(&self) -> vk::ShaderModule {
         self.inner
+    }
+
+    /// Returns the entry point name of the shader. The end of the string is
+    /// guaranteed to be a null character.
+    #[must_use]
+    pub fn entry(&self) -> &str {
+        &self.entry
     }
 
     /// Returns the type of the shader.
@@ -120,7 +131,10 @@ impl Default for ShaderCompileInfo<'_> {
 /// path to the source code.
 #[derive(Debug, PartialEq, Eq, Hash)]
 pub enum ShaderSource<'a> {
+    /// The source code of the shader.
     Code(&'a str),
+
+    /// The path to the source code of the shader.
     File(&'a str),
 }
 

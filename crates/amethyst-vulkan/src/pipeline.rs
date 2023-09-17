@@ -58,8 +58,8 @@ impl Pipeline {
                     ShaderType::Vertex => vk::ShaderStageFlags::VERTEX,
                 };
                 vk::PipelineShaderStageCreateInfo::builder()
+                    .name(shader.entry().as_bytes())
                     .module(shader.inner())
-                    .name(b"main\0")
                     .stage(stage)
                     .build()
             })

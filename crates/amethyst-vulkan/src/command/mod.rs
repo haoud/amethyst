@@ -3,10 +3,11 @@ use crate::{
     descriptor::DescriptorSet,
     device::RenderDevice,
     prelude::{
-        AttachmentLoadOp, AttachmentStoreOp, Image, ImageAccess, ImageLayout,
-        ImageSubResourceLayer, ImageSubResourceRange, ImageView, Pipeline, PipelineStage,
+        AttachmentLoadOp, AttachmentStoreOp, Extent2D, Extent3D, Image, ImageAccess, ImageLayout,
+        ImageSubResourceLayer, ImageSubResourceRange, ImageView, Pipeline, PipelineStage, Queue,
+        QueueSubmitInfo,
     },
-    surface::{Extent2D, Extent3D},
+    sync::Semaphore,
 };
 use std::{marker::PhantomData, mem::ManuallyDrop, sync::Arc};
 use vulkanalia::{prelude::v1_2::*, vk::DeviceV1_3};
@@ -115,7 +116,12 @@ impl Command<Recording> {
             self.device
                 .logical()
                 .inner()
-                .cmd_bind_vertex_buffers(self.inner, 0, &[buffer.inner()], &[0]);
+                .cmd_bind_vertex_buffers(
+                    self.inner,
+                    0,
+                    &[buffer.inner()],
+                    &[buffer.offset() as u64],
+                );
         }
         self
     }
@@ -126,7 +132,12 @@ impl Command<Recording> {
             self.device
                 .logical()
                 .inner()
-                .cmd_bind_index_buffer(self.inner, buffer.inner(), 0, vk::IndexType::from(kind));
+                .cmd_bind_index_buffer(
+                    self.inner,
+                    buffer.inner(),
+                    buffer.offset() as u64,
+                    vk::IndexType::from(kind),
+                );
         }
         self
     }
@@ -225,6 +236,7 @@ impl Command<Recording> {
         self
     }
 
+    /// Draw indexed
     pub fn draw_indexed(self, info: DrawIndexedCommandInfo) -> Self {
         unsafe {
             self.device
@@ -264,9 +276,9 @@ impl Command<Recording> {
                     info.src.inner(),
                     info.dst.inner(),
                     &[vk::BufferCopy::builder()
+                        .size((info.count * std::mem::size_of::<T>()) as u64)
                         .dst_offset(info.dst.offset() as u64)
                         .src_offset(info.src.offset() as u64)
-                        .size(info.size)
                         .build()],
                 );
         }
@@ -302,12 +314,16 @@ impl Command<Recording> {
         self
     }
 
+    /// Copy a buffer into an image.
+    /// FIXME: Memory safety ?
     pub fn copy_buffer_to_image(
         self,
         buffer: &SubBuffer<u8>,
         image: &Image,
         info: CopyBufferIntoImageInfo,
     ) -> Self {
+        // TODO: Make sure the image is large enough to hold the buffer
+
         let subressource = vk::ImageSubresourceLayers::from(info.subresource_layer);
         let extent = vk::Extent3D::from(info.extent);
         let offset = vk::Offset3D { x: 0, y: 0, z: 0 };
@@ -338,7 +354,7 @@ impl Command<Recording> {
     }
 
     /// Stop recording commands. If you want to submit the commands, you need to
-    /// call this method first.
+    /// call this method before submitting.
     pub fn stop_recording(self) -> Command<Executable> {
         unsafe {
             self.device
@@ -357,7 +373,24 @@ impl Command<Recording> {
     }
 }
 
-impl Command<Executable> {}
+impl Command<Executable> {
+    /// Submit the command buffer to the given queue. This function will block
+    /// until the command buffer is executed by the GPU. This is a convenience
+    /// function that calls `Queue::submit` and `Queue::wait_idle`, but is
+    /// less efficient than submitting multiple command buffers at once.
+    pub fn submit_to(self, queue: &Queue, info: CommandSubmitInfo) {
+        queue.submit(
+            &self.device,
+            QueueSubmitInfo {
+                signal_semaphore: info.signal_semaphore,
+                wait_semaphore: info.wait_semaphore,
+                commands: &[&self],
+            },
+        );
+
+        queue.wait_idle(&self.device);
+    }
+}
 
 impl<T: State> Drop for Command<T> {
     fn drop(&mut self) {
@@ -479,6 +512,8 @@ impl From<RenderingAttachementInfo<'_>> for vk::RenderingAttachmentInfo {
             .build()
     }
 }
+
+/// A clear value.
 pub enum ClearValue {
     Color([f32; 4]),
     DepthStencil(f32, u32),
@@ -534,11 +569,24 @@ pub struct CopyBufferInfo<'a, T> {
     /// The destination buffer.
     pub dst: &'a SubBuffer<T>,
 
-    /// The size of the data to copy.
-    pub size: u64,
+    /// The number of objects to copy.
+    pub count: usize,
 }
 
 pub struct CopyBufferIntoImageInfo {
     pub subresource_layer: ImageSubResourceLayer,
     pub extent: Extent3D,
+}
+
+/// A command submit info. It contains the semaphores that the queue will wait
+/// on before executing the command, and the semaphore that will be signaled
+/// when the queue finishes executing the command.
+pub struct CommandSubmitInfo<'a> {
+    /// The semaphore that will be signaled when the queue finishes
+    /// executing the command.
+    pub signal_semaphore: &'a [&'a Semaphore],
+
+    /// The semaphore that the queue will wait on before executing the
+    /// command.
+    pub wait_semaphore: &'a [&'a Semaphore],
 }

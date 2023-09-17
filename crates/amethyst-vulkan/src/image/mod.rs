@@ -1,24 +1,26 @@
-use std::sync::Arc;
-
-use bitflags::bitflags;
-pub use vulkanalia::prelude::v1_2::*;
-
 use crate::{
     buffer::{
         subbuffer::{SubBuffer, SubBufferCreateInfo},
-        BufferAccessMode, BufferKind, BufferMemoryLocation, BufferTransfert,
+        Buffer, BufferAccessMode, BufferCreateInfo, BufferKind, BufferMemoryLocation,
+        BufferTransfert, BufferUsageInfo,
     },
     command::{
         Command, CommandCreateInfo, CopyBufferIntoImageInfo, ImageBarrier, PipelineBarrierInfo,
     },
     device::RenderDevice,
     prelude::{PipelineStage, QueueSubmitInfo},
-    surface::{Extent2D, Extent3D},
 };
+use bitflags::bitflags;
+use std::sync::Arc;
+pub use vulkanalia::prelude::v1_2::*;
 
 use self::{sampler::ImageSampler, view::ImageView};
 
+/// An image format. This is a redefinition of the `Format` enum
+pub type ImageFormat = crate::format::Format;
+
 pub mod sampler;
+pub mod surface;
 pub mod view;
 
 /// An image
@@ -68,15 +70,18 @@ impl Image {
                 .get_image_memory_requirements(inner)
         };
 
-        let buffer = SubBuffer::empty(
+        let buffer = Buffer::empty(
             Arc::clone(&device),
-            memory_requirements.size as usize,
-            BufferKind::None,
-            SubBufferCreateInfo {
-                memory_type: memory_requirements.memory_type_bits,
-                location: BufferMemoryLocation::PreferHostVisible,
-                transfer: BufferTransfert::Destination,
-                access: BufferAccessMode::Sequential,
+            BufferCreateInfo {
+                usage: BufferUsageInfo {
+                    memory_type: memory_requirements.memory_type_bits,
+                    location: BufferMemoryLocation::PreferHostVisible,
+                    transfer: BufferTransfert::Destination,
+                    access: BufferAccessMode::Sequential,
+                },
+                alignment: memory_requirements.alignment as usize,
+                size: memory_requirements.size as usize,
+                kind: BufferKind::None,
             },
         );
 
@@ -93,12 +98,15 @@ impl Image {
         // undefined state.
         if !info.data.is_empty() {
             let image = Image::raw(inner, ImageMemory::Undefined);
-
             let staging = SubBuffer::new(
                 Arc::clone(&device),
                 info.data,
-                BufferKind::None,
-                SubBufferCreateInfo::STAGING,
+                SubBufferCreateInfo {
+                    usage: BufferUsageInfo::STAGING,
+                    kind: BufferKind::None,
+                    count: info.data.len(),
+                    ..Default::default()
+                },
             );
 
             let extent_3d = Extent3D {
@@ -161,7 +169,7 @@ impl Image {
         }
 
         Self {
-            memory: ImageMemory::Buffer(buffer),
+            memory: ImageMemory::Buffer(SubBuffer::from(buffer)),
             inner,
         }
     }
@@ -251,33 +259,6 @@ pub enum ImageMemory {
     Undefined,
 }
 
-pub enum ImageFormat {
-    R8G8B8A8SRGB,
-    B8G8R8A8SRGB,
-    D32SFLOAT,
-}
-
-impl From<ImageFormat> for vk::Format {
-    fn from(value: ImageFormat) -> Self {
-        match value {
-            ImageFormat::R8G8B8A8SRGB => vk::Format::R8G8B8A8_SRGB,
-            ImageFormat::B8G8R8A8SRGB => vk::Format::B8G8R8A8_SRGB,
-            ImageFormat::D32SFLOAT => vk::Format::D32_SFLOAT,
-        }
-    }
-}
-
-impl From<vk::Format> for ImageFormat {
-    fn from(value: vk::Format) -> Self {
-        match value {
-            vk::Format::R8G8B8A8_SRGB => Self::R8G8B8A8SRGB,
-            vk::Format::B8G8R8A8_SRGB => Self::B8G8R8A8SRGB,
-            vk::Format::D32_SFLOAT => Self::D32SFLOAT,
-            _ => panic!("Unsupported image format"),
-        }
-    }
-}
-
 bitflags! {
     #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
     pub struct ImageAspectFlags : u32 {
@@ -321,6 +302,7 @@ impl From<ImageSubResourceRange> for vk::ImageSubresourceRange {
     }
 }
 
+/// An image subresource layer.
 pub struct ImageSubResourceLayer {
     pub aspect_mask: ImageAspectFlags,
     pub base_array_layer: u32,
@@ -371,9 +353,19 @@ impl From<ImageUsage> for vk::ImageUsageFlags {
 
 /// An image create info.
 pub struct ImageCreateInfo<'a> {
+    /// The format of the image data.
     pub format: ImageFormat,
+
+    /// The extent of the image (width and height)
     pub extent: Extent2D,
+
+    /// The expected usage of the image. This allow the driver to optimize the image
+    /// for the specified usage. Most functions will have a undefined behavior if
+    /// the image is used in a way that is not specified here.
     pub usage: ImageUsage,
+
+    /// The data to copy to the image. It must be raw pixel data in the format
+    /// specified by `format`.
     pub data: &'a [u8],
 }
 
@@ -387,6 +379,59 @@ impl Default for ImageCreateInfo<'_> {
             },
             usage: ImageUsage::SAMPLED | ImageUsage::TRANSFER_DST,
             data: &[],
+        }
+    }
+}
+
+// An 2D extent
+#[derive(Default, Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct Extent2D {
+    pub height: u32,
+    pub width: u32,
+}
+
+impl From<vk::Extent2D> for Extent2D {
+    fn from(extent: vk::Extent2D) -> Self {
+        Self {
+            height: extent.height,
+            width: extent.width,
+        }
+    }
+}
+
+impl From<Extent2D> for vk::Extent2D {
+    fn from(extent: Extent2D) -> Self {
+        Self {
+            height: extent.height,
+            width: extent.width,
+        }
+    }
+}
+
+// An 3D extent
+#[derive(Default, Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct Extent3D {
+    pub height: u32,
+    pub width: u32,
+    pub depth: u32,
+}
+
+impl From<vk::Extent3D> for Extent3D {
+    fn from(extent: vk::Extent3D) -> Self {
+        Self {
+            height: extent.height,
+            width: extent.width,
+            depth: extent.depth,
+        }
+    }
+}
+
+impl From<Extent3D> for vk::Extent3D {
+    fn from(extent: Extent3D) -> Self {
+        Self {
+            height: extent.height,
+            width: extent.width,
+            depth: extent.depth,
         }
     }
 }

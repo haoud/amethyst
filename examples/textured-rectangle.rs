@@ -150,22 +150,31 @@ fn main() {
             model: glm::identity(),
             view: camera.projection().clone(),
         }],
-        BufferKind::Uniforms,
-        SubBufferCreateInfo::UNIFORM,
+        SubBufferCreateInfo {
+            usage: BufferUsageInfo::UNIFORM,
+            kind: BufferKind::Uniforms,
+            ..Default::default()
+        },
     );
 
     let vertices_buffer = SubBuffer::new(
         Arc::clone(&device),
         &VERTICES,
-        BufferKind::Vertices,
-        SubBufferCreateInfo::STATIC_RENDERING,
+        SubBufferCreateInfo {
+            usage: BufferUsageInfo::STATIC_RENDERING,
+            kind: BufferKind::Vertices,
+            ..Default::default()
+        },
     );
 
     let indices_buffer = SubBuffer::new(
         Arc::clone(&device),
         &INDICES,
-        BufferKind::Indices,
-        SubBufferCreateInfo::STATIC_RENDERING,
+        SubBufferCreateInfo {
+            usage: BufferUsageInfo::STATIC_RENDERING,
+            kind: BufferKind::Indices,
+            ..Default::default()
+        },
     );
 
     let (image, width, height) = load_image();
@@ -198,7 +207,7 @@ fn main() {
         },
     );
 
-    let teture_sampler = ImageSampler::new(Arc::clone(&device), ImageSamplerCreatInfo {});
+    let texture_sampler = ImageSampler::new(Arc::clone(&device), ImageSamplerCreatInfo {});
 
     // Create a descriptor pool to allocate the descriptor sets, and create
     // a descriptor set from the descriptor pool with the uniform data buffer.
@@ -223,7 +232,7 @@ fn main() {
         1,
         ImageDescriptorInfo {
             layout: ImageLayout::ShaderReadOnlyOptimal,
-            sampler: &teture_sampler,
+            sampler: &texture_sampler,
             view: &texture_view,
         },
     );
@@ -246,8 +255,8 @@ fn main() {
                     },
                 );
 
-                // Record the command buffer.
-                let command = command
+                // Record the command buffer and submit it to the graphic queue.
+                command
                     .start_recording()
                     // Update the uniform buffer with the new model matrix.
                     .update_buffer(
@@ -304,17 +313,14 @@ fn main() {
                             image: image,
                         }],
                     })
-                    .stop_recording();
-
-                // Submit the command buffer to the graphic queue.
-                device.graphic_queue().submit(
-                    &device,
-                    QueueSubmitInfo {
-                        signal_semaphore: &[&render_semaphore],
-                        wait_semaphore: &[&acquire_semaphore],
-                        commands: &[&command],
-                    },
-                );
+                    .stop_recording()
+                    .submit_to(
+                        device.graphic_queue(),
+                        CommandSubmitInfo {
+                            signal_semaphore: &[&render_semaphore],
+                            wait_semaphore: &[&acquire_semaphore],
+                        },
+                    );
 
                 // Present the image to the swapchain.
                 swapchain.present_image(SwapchainPresentInfo {

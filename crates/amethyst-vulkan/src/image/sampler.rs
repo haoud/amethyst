@@ -3,6 +3,8 @@ use vulkanalia::prelude::v1_2::*;
 
 use crate::device::RenderDevice;
 
+/// An image sampler. An image sampler is used used by the vulkan implementation to
+/// read image data and apply filtering and other transformations for the shader.
 pub struct ImageSampler {
     device: Arc<RenderDevice>,
     inner: vk::Sampler,
@@ -57,6 +59,7 @@ impl Drop for ImageSampler {
     }
 }
 
+/// Image sampler creation info.
 pub struct ImageSamplerCreatInfo {}
 
 impl Default for ImageSamplerCreatInfo {

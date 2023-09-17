@@ -130,8 +130,11 @@ fn main() {
     let vertices_buffer = SubBuffer::new(
         Arc::clone(&device),
         &VERTICES,
-        BufferKind::Vertices,
-        SubBufferCreateInfo::STATIC_RENDERING,
+        SubBufferCreateInfo {
+            usage: BufferUsageInfo::STATIC_RENDERING,
+            kind: BufferKind::Vertices,
+            ..Default::default()
+        },
     );
 
     // Create a semaphore to make sure that the acquire operation of the
@@ -168,7 +171,7 @@ fn main() {
                 // this case, it could be done only once before the main loop because
                 // the command buffer is pretty much static and does not change across
                 // frames.
-                let command = command
+                command
                     .start_recording()
                     // We must transition the image format manually, because the image acquired
                     // from the swapchain is not guaranteed to have the format that we want during
@@ -225,17 +228,14 @@ fn main() {
                             image: image,
                         }],
                     })
-                    .stop_recording();
-
-                // Submit the command buffer to the graphic queue.
-                device.graphic_queue().submit(
-                    &device,
-                    QueueSubmitInfo {
-                        signal_semaphore: &[&render_semaphore],
-                        wait_semaphore: &[&acquire_semaphore],
-                        commands: &[&command],
-                    },
-                );
+                    .stop_recording()
+                    .submit_to(
+                        device.graphic_queue(),
+                        CommandSubmitInfo {
+                            signal_semaphore: &[&render_semaphore],
+                            wait_semaphore: &[&acquire_semaphore],
+                        },
+                    );
 
                 // Present the image to the swapchain.
                 swapchain.present_image(SwapchainPresentInfo {

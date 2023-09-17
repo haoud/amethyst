@@ -158,6 +158,13 @@ impl LogicalDevice {
     pub fn new(vulkan: &Vulkan, physical: PhysicalDevice, _: LogicalDeviceCreateInfo) -> Self {
         // The device queues creation does not support duplicates, so we need to
         // create a set of unique indices and then create the queues from it
+
+        // TODO: Try to find different queues if possible: The best layout would
+        // be to have a graphics queue, a compute queue and a present queue, all
+        // from different families to maximize parallelism.
+        // However, this is not always possible, so we need to make sure that
+        // the engine can work with only one queue.
+
         let queues_indices_set = HashSet::from([
             physical.graphics_queue_index,
             physical.compute_queue_index,
@@ -297,6 +304,7 @@ impl RenderDevice {
             },
         ));
 
+        // Fetch the graphic queue
         let graphic_queue = unsafe {
             let queue = logical
                 .inner()
@@ -307,6 +315,7 @@ impl RenderDevice {
             )
         };
 
+        // Fetch the compute queue
         let compute_queue = unsafe {
             let queue = logical
                 .inner()
@@ -317,6 +326,7 @@ impl RenderDevice {
             )
         };
 
+        // Fetch the present queue
         let present_queue = unsafe {
             let queue = logical
                 .inner()
@@ -327,12 +337,16 @@ impl RenderDevice {
             )
         };
 
+        // Create a command pool for the graphic queue
+        // TODO: Make this thread local, and maybe independent from the graphic queue
+        // and from the render device ?
         let commands_pool = CommandPool::new(
             Arc::clone(&logical),
             &graphic_queue,
             CommandPoolCreateFlags::empty(),
         );
 
+        // TODO: Same as above
         let buffer_allocator = BufferAllocator::new(&vulkan, &logical);
 
         Self {

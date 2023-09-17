@@ -1,7 +1,7 @@
 use crate::{
     device::RenderDevice,
-    prelude::{Image, ImageMemory, ImageView, ImageViewCreateInfo},
-    surface::{ColorSpace, Extent2D, Format},
+    image::surface::ColorSpace,
+    prelude::{Extent2D, Image, ImageFormat, ImageMemory, ImageView, ImageViewCreateInfo},
     sync::Semaphore,
     Vulkan,
 };
@@ -13,17 +13,16 @@ use vulkanalia::{
 };
 
 /// A swapchain. A swapchain provides the ability to present rendering
-/// results to a surface
+/// results to a surface.
 pub struct Swapchain {
     device: Arc<RenderDevice>,
-
-    images_views: Vec<ImageView>,
-    images: Vec<Image>,
 
     present_mode: PresentMode,
     format: SwapchainFormat,
     extent: Extent2D,
 
+    images_views: Vec<ImageView>,
+    images: Vec<Image>,
     inner: vk::SwapchainKHR,
 }
 
@@ -134,7 +133,8 @@ impl Swapchain {
     }
 
     /// Present an image to the swapchain and wait for the present to complete.
-    /// Before presenting the image, the `wait_semaphore` is waited on.
+    /// Before presenting the image, the `wait_semaphore` is waited on. After
+    /// presenting the image, this function will wait for the present to complete.
     pub fn present_image(&self, info: SwapchainPresentInfo) {
         let wait_semaphores = &[info.wait_semaphore.inner()];
         let image_indices = &[info.image_index];
@@ -235,7 +235,7 @@ pub struct SwapchainCreatInfo {
 
     /// The format of the swapchain. If not specified or not supported, the
     /// swapchain will be created with the best supported format.
-    pub format: Format,
+    pub format: ImageFormat,
 }
 
 impl Default for SwapchainCreatInfo {
@@ -244,7 +244,7 @@ impl Default for SwapchainCreatInfo {
             sharing_mode: SharingMode::Exclusive,
             present_mode: PresentMode::default(),
             color_space: ColorSpace::SrgbNonLinear,
-            format: Format::R8G8B8A8Srgb,
+            format: ImageFormat::R8G8B8A8SRGB,
             images_count: 1,
             extent: None,
         }
@@ -279,7 +279,7 @@ impl SwapchainSupport {
                 .expect("Failed to query surface formats")
                 .into_iter()
                 .map(|format| SwapchainFormat::from(format))
-                .filter(|format| format.format != Format::Undefined)
+                .filter(|format| format.format != ImageFormat::Undefined)
                 .filter(|format| format.color_space != ColorSpace::Undefined)
                 .collect::<HashSet<_>>()
                 .into_iter()
@@ -377,7 +377,7 @@ impl SwapchainSupport {
         self.formats
             .iter()
             .find(|format| {
-                format.format == Format::R8G8B8A8Srgb
+                format.format == ImageFormat::R8G8B8A8SRGB
                     && format.color_space == ColorSpace::SrgbNonLinear
             })
             .copied()
@@ -526,7 +526,7 @@ impl From<vk::SharingMode> for SharingMode {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct SwapchainFormat {
     pub color_space: ColorSpace,
-    pub format: Format,
+    pub format: ImageFormat,
 }
 
 impl From<vk::SurfaceFormatKHR> for SwapchainFormat {

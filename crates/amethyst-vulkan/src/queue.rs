@@ -46,10 +46,10 @@ impl Queue {
     }
 
     /// Submits commands into the queue.
-    /// TODO: Add support for multiple semaphore, and wait stages.
     pub fn submit(&self, device: &RenderDevice, info: QueueSubmitInfo) {
         assert!(info.signal_semaphore.len() == info.wait_semaphore.len());
 
+        // TODO: Make this configurable ? How ?
         let wait_stages = (0..info.wait_semaphore.len())
             .map(|_| vk::PipelineStageFlags::COLOR_ATTACHMENT_OUTPUT)
             .collect::<Vec<_>>();
