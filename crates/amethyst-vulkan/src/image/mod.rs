@@ -1,8 +1,3 @@
-use std::sync::Arc;
-
-use bitflags::bitflags;
-pub use vulkanalia::prelude::v1_2::*;
-
 use crate::{
     buffer::{
         subbuffer::{SubBuffer, SubBufferCreateInfo},
@@ -15,6 +10,9 @@ use crate::{
     device::RenderDevice,
     prelude::{PipelineStage, QueueSubmitInfo},
 };
+use bitflags::bitflags;
+use std::sync::Arc;
+pub use vulkanalia::prelude::v1_2::*;
 
 use self::{sampler::ImageSampler, view::ImageView};
 
@@ -304,6 +302,7 @@ impl From<ImageSubResourceRange> for vk::ImageSubresourceRange {
     }
 }
 
+/// An image subresource layer.
 pub struct ImageSubResourceLayer {
     pub aspect_mask: ImageAspectFlags,
     pub base_array_layer: u32,
@@ -354,9 +353,19 @@ impl From<ImageUsage> for vk::ImageUsageFlags {
 
 /// An image create info.
 pub struct ImageCreateInfo<'a> {
+    /// The format of the image data.
     pub format: ImageFormat,
+
+    /// The extent of the image (width and height)
     pub extent: Extent2D,
+
+    /// The expected usage of the image. This allow the driver to optimize the image
+    /// for the specified usage. Most functions will have a undefined behavior if
+    /// the image is used in a way that is not specified here.
     pub usage: ImageUsage,
+
+    /// The data to copy to the image. It must be raw pixel data in the format
+    /// specified by `format`.
     pub data: &'a [u8],
 }
 

@@ -1,11 +1,13 @@
+use super::{Image, ImageFormat, ImageSubResourceRange};
+use crate::device::RenderDevice;
 use std::sync::Arc;
 pub use vulkanalia::prelude::v1_2::*;
 
-use crate::device::RenderDevice;
-
-use super::{Image, ImageFormat, ImageSubResourceRange};
-
-/// An image view.
+/// An image view. Image objects are not directly accessed by pipeline shaders
+/// for reading or writing image data. Instead, image views representing contiguous
+/// ranges of the image subresources and containing additional metadata are used
+/// for that purpose. Views must be created on images of compatible types, and must
+/// represent a valid subset of image subresources.
 pub struct ImageView {
     device: Arc<RenderDevice>,
     inner: vk::ImageView,
@@ -57,9 +59,20 @@ impl Drop for ImageView {
     }
 }
 
+/// Image view creation info.
 pub struct ImageViewCreateInfo {
+    /// The image subresource range. This describes the image subresources that
+    /// can be accessed through this image view. By default, this is set to
+    /// include all subresources of the image.
     pub subresource: ImageSubResourceRange,
+
+    /// The format of the image data. This must be compatible with the format
+    /// specified when the image was created.
     pub format: ImageFormat,
+
+    /// The type of the image view. This must be compatible with the image.
+    /// Usually, the ImageViewKind should be `Type2D`, meaning that the image
+    /// view is a 2D texture.
     pub kind: ImageViewKind,
 }
 
