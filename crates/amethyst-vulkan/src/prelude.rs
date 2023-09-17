@@ -8,7 +8,7 @@ pub use crate::{
     },
     command::{
         pool::{CommandPool, CommandPoolCreateFlags},
-        ClearValue, Command, CommandCreateInfo, CopyBufferInfo, DrawCommandInfo,
+        ClearValue, Command, CommandCreateInfo, CommandSubmitInfo, CopyBufferInfo, DrawCommandInfo,
         DrawIndexedCommandInfo, Executable, Idle, ImageBarrier, IndicesType, PipelineBarrierInfo,
         Recording, RenderingAttachementInfo, RenderingInfo,
     },

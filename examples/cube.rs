@@ -341,7 +341,7 @@ fn main() {
                     },
                 );
 
-                let command = command
+                command
                     .start_recording()
                     .update_buffer(
                         &uniform_buffer,
@@ -426,17 +426,14 @@ fn main() {
                             image: image,
                         }],
                     })
-                    .stop_recording();
-
-                // Submit the command buffer to the graphic queue.
-                device.graphic_queue().submit(
-                    &device,
-                    QueueSubmitInfo {
-                        signal_semaphore: &[&render_semaphore],
-                        wait_semaphore: &[&acquire_semaphore],
-                        commands: &[&command],
-                    },
-                );
+                    .stop_recording()
+                    .submit_to(
+                        device.graphic_queue(),
+                        CommandSubmitInfo {
+                            signal_semaphore: &[&render_semaphore],
+                            wait_semaphore: &[&acquire_semaphore],
+                        },
+                    );
 
                 // Present the image to the swapchain.
                 swapchain.present_image(SwapchainPresentInfo {

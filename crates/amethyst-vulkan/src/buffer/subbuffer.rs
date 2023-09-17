@@ -103,7 +103,7 @@ impl<T: Sized> SubBuffer<T> {
                     let command = command
                         .start_recording()
                         .copy_buffer(CopyBufferInfo {
-                            size: self.size() as u64,
+                            count: self.count,
                             src: &staging,
                             dst: &self,
                         })
