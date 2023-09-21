@@ -3,6 +3,8 @@ use vulkanalia::prelude::v1_2::*;
 
 use crate::device::RenderDevice;
 
+use super::MipmapMode;
+
 /// An image sampler. An image sampler is used used by the vulkan implementation to
 /// read image data and apply filtering and other transformations for the shader.
 pub struct ImageSampler {
@@ -12,23 +14,25 @@ pub struct ImageSampler {
 
 impl ImageSampler {
     #[must_use]
-    pub fn new(device: Arc<RenderDevice>, _info: ImageSamplerCreatInfo) -> Self {
+    pub fn new(device: Arc<RenderDevice>, info: ImageSamplerCreatInfo) -> Self {
         let create_info = vk::SamplerCreateInfo::builder()
             .border_color(vk::BorderColor::FLOAT_OPAQUE_WHITE)
             .address_mode_u(vk::SamplerAddressMode::REPEAT)
             .address_mode_v(vk::SamplerAddressMode::REPEAT)
             .address_mode_w(vk::SamplerAddressMode::REPEAT)
-            .mipmap_mode(vk::SamplerMipmapMode::LINEAR)
+            .unnormalized_coordinates(false)
             .compare_op(vk::CompareOp::ALWAYS)
+            .compare_enable(false)
+            /* Anisotropy informations */
+            .anisotropy_enable(false)
+            .max_anisotropy(0.0)
+            /* Mimap informations */
+            .mipmap_mode(info.mip_map_mode.into())
             .mag_filter(vk::Filter::LINEAR)
             .min_filter(vk::Filter::LINEAR)
-            .unnormalized_coordinates(false)
-            .anisotropy_enable(false)
-            .compare_enable(false)
-            .max_anisotropy(0.0)
-            .mip_lod_bias(0.0)
-            .min_lod(0.0)
-            .max_lod(0.0)
+            .mip_lod_bias(info.min_lod_bias)
+            .min_lod(info.min_lod)
+            .max_lod(info.max_lod)
             .build();
 
         let inner = unsafe {
@@ -60,10 +64,20 @@ impl Drop for ImageSampler {
 }
 
 /// Image sampler creation info.
-pub struct ImageSamplerCreatInfo {}
+pub struct ImageSamplerCreatInfo {
+    pub mip_map_mode: MipmapMode,
+    pub min_lod_bias: f32,
+    pub min_lod: f32,
+    pub max_lod: f32,
+}
 
 impl Default for ImageSamplerCreatInfo {
     fn default() -> Self {
-        Self {}
+        Self {
+            mip_map_mode: MipmapMode::Linear,
+            min_lod_bias: 0.0,
+            min_lod: 0.0,
+            max_lod: 0.0,
+        }
     }
 }

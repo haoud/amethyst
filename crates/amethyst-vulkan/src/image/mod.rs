@@ -5,13 +5,15 @@ use crate::{
         BufferTransfert, BufferUsageInfo,
     },
     command::{
-        Command, CommandCreateInfo, CopyBufferIntoImageInfo, ImageBarrier, PipelineBarrierInfo,
+        Command, CommandCreateInfo, CommandSubmitInfo, CopyBufferIntoImageInfo, ImageBarrier,
+        ImageBlit, ImageBlitInfo, PipelineBarrierInfo,
     },
     device::RenderDevice,
-    prelude::{PipelineStage, QueueSubmitInfo},
+    prelude::PipelineStage,
+    Offset3D,
 };
 use bitflags::bitflags;
-use std::sync::Arc;
+use std::{ops::Add, sync::Arc};
 pub use vulkanalia::prelude::v1_2::*;
 
 use self::{sampler::ImageSampler, view::ImageView};
@@ -25,13 +27,16 @@ pub mod view;
 
 /// An image
 pub struct Image {
+    mip_levels: u32,
     memory: ImageMemory,
     inner: vk::Image,
 }
 
 impl Image {
+    /// Create a new empty image with the given create info. The image will be created with
+    /// the `UNDEFINED` layout and can be filled with data using a command buffer.
     #[must_use]
-    pub fn new(device: Arc<RenderDevice>, info: ImageCreateInfo) -> Self {
+    pub fn empty(device: Arc<RenderDevice>, info: ImageCreateInfo) -> Self {
         assert!(info.extent.width > 0 && info.extent.height > 0);
 
         let extent = vk::Extent3D::builder()
@@ -40,6 +45,17 @@ impl Image {
             .depth(1)
             .build();
 
+        // Compute the number of mipmaps
+        let mip_level = match info.mipmap_levels {
+            MipmapLevel::Count(count) => count,
+            MipmapLevel::None => 1,
+            MipmapLevel::Auto => {
+                let height = info.extent.height as f32;
+                let width = info.extent.width as f32;
+                width.max(height).log2().floor().add(1.0) as u32
+            }
+        };
+
         let create_info = vk::ImageCreateInfo::builder()
             .initial_layout(vk::ImageLayout::UNDEFINED)
             .sharing_mode(vk::SharingMode::EXCLUSIVE)
@@ -47,10 +63,10 @@ impl Image {
             .tiling(vk::ImageTiling::OPTIMAL)
             .image_type(vk::ImageType::_2D)
             .format(info.format.into())
-            .array_layers(1)
-            .mip_levels(1)
-            .extent(extent)
+            .mip_levels(mip_level)
             .usage(info.usage.into())
+            .array_layers(1)
+            .extent(extent)
             .build();
 
         // Create the image
@@ -94,90 +110,224 @@ impl Image {
                 .expect("Failed to bind image memory");
         }
 
-        // If data was provided, copy it to the image. Otherwise, the image is left in an
-        // undefined state.
-        if !info.data.is_empty() {
-            let image = Image::raw(inner, ImageMemory::Undefined);
-            let staging = SubBuffer::new(
-                Arc::clone(&device),
-                info.data,
-                SubBufferCreateInfo {
-                    usage: BufferUsageInfo::STAGING,
-                    kind: BufferKind::None,
-                    count: info.data.len(),
-                    ..Default::default()
-                },
-            );
-
-            let extent_3d = Extent3D {
-                height: info.extent.height,
-                width: info.extent.width,
-                depth: 1,
-            };
-
-            let command = Command::new(
-                Arc::clone(&device),
-                CommandCreateInfo {
-                    ..Default::default()
-                },
-            )
-            .start_recording()
-            .pipeline_barrier(PipelineBarrierInfo {
-                src_stage_mask: PipelineStage::TOP_OF_PIPE,
-                dst_stage_mask: PipelineStage::TRANSFER,
-                images_barriers: vec![ImageBarrier {
-                    subresource_range: ImageSubResourceRange::default(),
-                    src_access_mask: ImageAccess::UNDEFINED,
-                    dst_access_mask: ImageAccess::TRANSFER_WRITE,
-                    old_layout: ImageLayout::Undefined,
-                    new_layout: ImageLayout::TransfertDstOptimal,
-                    image: &image,
-                }],
-            })
-            .copy_buffer_to_image(
-                &staging,
-                &image,
-                CopyBufferIntoImageInfo {
-                    subresource_layer: ImageSubResourceLayer::default(),
-                    extent: extent_3d,
-                },
-            )
-            .pipeline_barrier(PipelineBarrierInfo {
-                src_stage_mask: PipelineStage::TRANSFER,
-                dst_stage_mask: PipelineStage::FRAGMENT_SHADER,
-                images_barriers: vec![ImageBarrier {
-                    subresource_range: ImageSubResourceRange::default(),
-                    src_access_mask: ImageAccess::TRANSFER_WRITE,
-                    dst_access_mask: ImageAccess::SHADER_READ,
-                    old_layout: ImageLayout::TransfertDstOptimal,
-                    new_layout: ImageLayout::ShaderReadOnlyOptimal,
-                    image: &image,
-                }],
-            })
-            .stop_recording();
-
-            device.graphic_queue().submit(
-                &device,
-                QueueSubmitInfo {
-                    signal_semaphore: &[],
-                    wait_semaphore: &[],
-                    commands: &[&command],
-                },
-            );
-
-            device.graphic_queue().wait_idle(&device);
-        }
-
         Self {
             memory: ImageMemory::Buffer(SubBuffer::from(buffer)),
+            mip_levels: mip_level,
             inner,
         }
     }
 
+    /// Create a new image with the given create info and will be filled with
+    /// the given data. This function will block until the image is fully created.
+    #[must_use]
+    pub fn new(device: Arc<RenderDevice>, data: &[u8], info: ImageCreateInfo) -> Self {
+        let image = Image::empty(Arc::clone(&device), info.clone());
+
+        if data.is_empty() {
+            return image;
+        }
+
+        let staging = SubBuffer::new(
+            Arc::clone(&device),
+            data,
+            SubBufferCreateInfo {
+                usage: BufferUsageInfo::STAGING,
+                kind: BufferKind::None,
+                count: data.len(),
+                ..Default::default()
+            },
+        );
+
+        let extent_3d = Extent3D {
+            height: info.extent.height,
+            width: info.extent.width,
+            depth: 1,
+        };
+
+        let mut command = Command::new(
+            Arc::clone(&device),
+            CommandCreateInfo {
+                ..Default::default()
+            },
+        )
+        .start_recording()
+        .pipeline_barrier(PipelineBarrierInfo {
+            src_stage_mask: PipelineStage::TOP_OF_PIPE,
+            dst_stage_mask: PipelineStage::TRANSFER,
+            images_barriers: vec![ImageBarrier {
+                subresource_range: ImageSubResourceRange {
+                    level_count: image.mip_levels,
+                    ..Default::default()
+                },
+                src_access_mask: ImageAccess::UNDEFINED,
+                dst_access_mask: ImageAccess::TRANSFER_WRITE,
+                old_layout: ImageLayout::Undefined,
+                new_layout: ImageLayout::TransfertDstOptimal,
+                image: &image,
+            }],
+        })
+        .copy_buffer_to_image(
+            &staging,
+            &image,
+            CopyBufferIntoImageInfo {
+                subresource_layer: ImageSubResourceLayer::default(),
+                extent: extent_3d,
+            },
+        );
+
+        // Generate the mipmaps if the mip map level is set to auto
+        match info.mipmap_levels {
+            MipmapLevel::Auto => {
+                let mut current_height = info.extent.height as f32;
+                let mut current_width = info.extent.width as f32;
+
+                // TODO: Check if the image format supports linear blitting
+
+                for i in 1..image.mip_levels {
+                    // Comptute the start and end offset of the blit
+                    let src_offset = [
+                        Offset3D { x: 0, y: 0, z: 0 },
+                        Offset3D {
+                            x: current_height as i32,
+                            y: current_width as i32,
+                            z: 1,
+                        },
+                    ];
+
+                    // Divide the current height and width by 2 in order to compute the
+                    // size of the next mipmap level. If the current height or width is
+                    // less than 1, then we don't need to generate the mipmap level.
+                    if current_height > 1.0 {
+                        current_height /= 2.0;
+                    }
+                    if current_width > 1.0 {
+                        current_width /= 2.0;
+                    }
+
+                    // Comptute the start and end offset of the blit
+                    let dst_offset = [
+                        Offset3D { x: 0, y: 0, z: 0 },
+                        Offset3D {
+                            x: current_height as i32,
+                            y: current_width as i32,
+                            z: 1,
+                        },
+                    ];
+
+                    command = command
+                        .pipeline_barrier(PipelineBarrierInfo {
+                            src_stage_mask: PipelineStage::TRANSFER,
+                            dst_stage_mask: PipelineStage::TRANSFER,
+                            images_barriers: vec![ImageBarrier {
+                                subresource_range: ImageSubResourceRange {
+                                    base_mip_level: i - 1,
+                                    ..Default::default()
+                                },
+                                src_access_mask: ImageAccess::TRANSFER_WRITE,
+                                dst_access_mask: ImageAccess::TRANSFER_READ,
+                                old_layout: ImageLayout::TransfertDstOptimal,
+                                new_layout: ImageLayout::TransfertSrcOptimal,
+                                image: &image,
+                            }],
+                        })
+                        .blit_image(ImageBlitInfo {
+                            blits: vec![ImageBlit {
+                                src_subresource: ImageSubResourceLayer {
+                                    aspect_mask: ImageAspectFlags::COLOR,
+                                    base_array_layer: 0,
+                                    layer_count: 1,
+                                    mip_level: i - 1,
+                                },
+                                src_offsets: src_offset,
+                                dst_subresource: ImageSubResourceLayer {
+                                    aspect_mask: ImageAspectFlags::COLOR,
+                                    base_array_layer: 0,
+                                    layer_count: 1,
+                                    mip_level: i,
+                                },
+                                dst_offsets: dst_offset,
+                            }],
+                            src_image: &image,
+                            dst_image: &image,
+                            src_image_layout: ImageLayout::TransfertSrcOptimal,
+                            dst_image_layout: ImageLayout::TransfertDstOptimal,
+                            filter: MipmapFilter::Linear,
+                        })
+                        .pipeline_barrier(PipelineBarrierInfo {
+                            src_stage_mask: PipelineStage::TRANSFER,
+                            dst_stage_mask: PipelineStage::FRAGMENT_SHADER,
+                            images_barriers: vec![ImageBarrier {
+                                subresource_range: ImageSubResourceRange {
+                                    base_mip_level: i - 1,
+                                    ..Default::default()
+                                },
+                                src_access_mask: ImageAccess::TRANSFER_READ,
+                                dst_access_mask: ImageAccess::SHADER_READ,
+                                old_layout: ImageLayout::TransfertSrcOptimal,
+                                new_layout: ImageLayout::ShaderReadOnlyOptimal,
+                                image: &image,
+                            }],
+                        });
+                }
+
+                // Change the layout of the last mipmap level to the fragment shader read only layout
+                command = command.pipeline_barrier(PipelineBarrierInfo {
+                    src_stage_mask: PipelineStage::TRANSFER,
+                    dst_stage_mask: PipelineStage::FRAGMENT_SHADER,
+                    images_barriers: vec![ImageBarrier {
+                        subresource_range: ImageSubResourceRange {
+                            base_mip_level: image.mip_levels - 1,
+                            ..Default::default()
+                        },
+                        src_access_mask: ImageAccess::TRANSFER_READ,
+                        dst_access_mask: ImageAccess::SHADER_READ,
+                        old_layout: ImageLayout::TransfertDstOptimal,
+                        new_layout: ImageLayout::ShaderReadOnlyOptimal,
+                        image: &image,
+                    }],
+                });
+            }
+            MipmapLevel::None => {
+                // Change the layout of the image to the fragment shader read only layout
+                command = command.pipeline_barrier(PipelineBarrierInfo {
+                    src_stage_mask: PipelineStage::TRANSFER,
+                    dst_stage_mask: PipelineStage::FRAGMENT_SHADER,
+                    images_barriers: vec![ImageBarrier {
+                        subresource_range: ImageSubResourceRange::default(),
+                        src_access_mask: ImageAccess::TRANSFER_WRITE,
+                        dst_access_mask: ImageAccess::SHADER_READ,
+                        old_layout: ImageLayout::TransfertDstOptimal,
+                        new_layout: ImageLayout::ShaderReadOnlyOptimal,
+                        image: &image,
+                    }],
+                });
+            }
+            MipmapLevel::Count(_) => panic!("Custom mipmaps are not supported yet"),
+        }
+
+        command.stop_recording().submit_to(
+            device.graphic_queue(),
+            CommandSubmitInfo {
+                signal_semaphore: &[],
+                wait_semaphore: &[],
+            },
+        );
+        image
+    }
+
     /// Create a new image.
     #[must_use]
-    pub(crate) fn raw(inner: vk::Image, memory: ImageMemory) -> Self {
-        Self { inner, memory }
+    pub(crate) fn raw(inner: vk::Image, memory: ImageMemory, mip_levels: u32) -> Self {
+        Self {
+            inner,
+            memory,
+            mip_levels,
+        }
+    }
+
+    /// Return the number of mipmaps levels in the image.
+    pub fn mipmap_levels(&self) -> u32 {
+        self.mip_levels
     }
 
     /// Return the inner vulkan image.
@@ -229,6 +379,7 @@ pub enum ImageLayout {
     ColorAttachmentOptimal,
     PresentSrcKhr,
     ShaderReadOnlyOptimal,
+    TransfertSrcOptimal,
     TransfertDstOptimal,
     DepthStencilAttachmentOptimal,
 }
@@ -241,6 +392,7 @@ impl From<ImageLayout> for vk::ImageLayout {
             ImageLayout::ColorAttachmentOptimal => vk::ImageLayout::COLOR_ATTACHMENT_OPTIMAL,
             ImageLayout::PresentSrcKhr => vk::ImageLayout::PRESENT_SRC_KHR,
             ImageLayout::ShaderReadOnlyOptimal => vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL,
+            ImageLayout::TransfertSrcOptimal => vk::ImageLayout::TRANSFER_SRC_OPTIMAL,
             ImageLayout::TransfertDstOptimal => vk::ImageLayout::TRANSFER_DST_OPTIMAL,
             ImageLayout::DepthStencilAttachmentOptimal => {
                 vk::ImageLayout::DEPTH_STENCIL_ATTACHMENT_OPTIMAL
@@ -352,7 +504,11 @@ impl From<ImageUsage> for vk::ImageUsageFlags {
 }
 
 /// An image create info.
-pub struct ImageCreateInfo<'a> {
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct ImageCreateInfo {
+    /// The mipmap level of the image.
+    pub mipmap_levels: MipmapLevel,
+
     /// The format of the image data.
     pub format: ImageFormat,
 
@@ -363,22 +519,61 @@ pub struct ImageCreateInfo<'a> {
     /// for the specified usage. Most functions will have a undefined behavior if
     /// the image is used in a way that is not specified here.
     pub usage: ImageUsage,
-
-    /// The data to copy to the image. It must be raw pixel data in the format
-    /// specified by `format`.
-    pub data: &'a [u8],
 }
 
-impl Default for ImageCreateInfo<'_> {
+impl Default for ImageCreateInfo {
     fn default() -> Self {
         Self {
+            mipmap_levels: MipmapLevel::None,
             format: ImageFormat::R8G8B8A8SRGB,
             extent: Extent2D {
                 height: 0,
                 width: 0,
             },
             usage: ImageUsage::SAMPLED | ImageUsage::TRANSFER_DST,
-            data: &[],
+        }
+    }
+}
+
+/// An image mipmap type
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum MipmapLevel {
+    /// The image will have no mipmaps.
+    None,
+
+    /// The image will have mipmaps automatically generated by the engine.
+    Auto,
+
+    /// The image will have mipmaps provided by the user.
+    Count(u32),
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum MipmapFilter {
+    Nearest,
+    Linear,
+}
+
+impl From<MipmapFilter> for vk::Filter {
+    fn from(value: MipmapFilter) -> Self {
+        match value {
+            MipmapFilter::Nearest => vk::Filter::NEAREST,
+            MipmapFilter::Linear => vk::Filter::LINEAR,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum MipmapMode {
+    Nearest,
+    Linear,
+}
+
+impl From<MipmapMode> for vk::SamplerMipmapMode {
+    fn from(value: MipmapMode) -> Self {
+        match value {
+            MipmapMode::Nearest => vk::SamplerMipmapMode::NEAREST,
+            MipmapMode::Linear => vk::SamplerMipmapMode::LINEAR,
         }
     }
 }

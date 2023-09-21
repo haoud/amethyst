@@ -9,8 +9,8 @@ pub use crate::{
     command::{
         pool::{CommandPool, CommandPoolCreateFlags},
         ClearValue, Command, CommandCreateInfo, CommandSubmitInfo, CopyBufferInfo, DrawCommandInfo,
-        DrawIndexedCommandInfo, Executable, Idle, ImageBarrier, IndicesType, PipelineBarrierInfo,
-        Recording, RenderingAttachementInfo, RenderingInfo,
+        DrawIndexedCommandInfo, Executable, Idle, ImageBarrier, ImageBlit, ImageBlitInfo,
+        IndicesType, PipelineBarrierInfo, Recording, RenderingAttachementInfo, RenderingInfo,
     },
     descriptor::{
         DescriptorPool, DescriptorPoolCreateInfo, DescriptorSet, DescriptorSetLayout,
@@ -27,7 +27,7 @@ pub use crate::{
         view::{ImageView, ImageViewCreateInfo, ImageViewKind},
         Extent2D, Extent3D, Image, ImageAccess, ImageAspectFlags, ImageCreateInfo,
         ImageDescriptorInfo, ImageFormat, ImageLayout, ImageMemory, ImageSubResourceLayer,
-        ImageSubResourceRange, ImageUsage,
+        ImageSubResourceRange, ImageUsage, MipmapFilter, MipmapLevel, MipmapMode,
     },
     pipeline::{
         AttachmentLoadOp, AttachmentStoreOp, CullMode, FillMode, FrontFace, Pipeline,
@@ -40,5 +40,5 @@ pub use crate::{
         SwapchainSupport,
     },
     sync::Semaphore,
-    Vulkan, VulkanInfo,
+    Offset2D, Offset3D, Vulkan, VulkanInfo,
 };

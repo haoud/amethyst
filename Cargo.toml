@@ -39,6 +39,9 @@ name = "rotating-triangle"
 [[example]]
 name = "textured-rectangle"
 
+[[example]]
+name = "mipmap"
+
 [profile.release]
 codegen-units = 1
 lto = true

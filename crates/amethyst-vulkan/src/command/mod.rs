@@ -2,12 +2,12 @@ use crate::{
     buffer::subbuffer::SubBuffer,
     descriptor::DescriptorSet,
     device::RenderDevice,
+    image::MipmapFilter,
     prelude::{
         AttachmentLoadOp, AttachmentStoreOp, Extent2D, Extent3D, Image, ImageAccess, ImageLayout,
-        ImageSubResourceLayer, ImageSubResourceRange, ImageView, Pipeline, PipelineStage, Queue,
-        QueueSubmitInfo,
+        ImageSubResourceLayer, ImageSubResourceRange, ImageView, Offset3D, Pipeline, PipelineStage,
+        Queue, QueueSubmitInfo, Semaphore,
     },
-    sync::Semaphore,
 };
 use std::{marker::PhantomData, mem::ManuallyDrop, sync::Arc};
 use vulkanalia::{prelude::v1_2::*, vk::DeviceV1_3};
@@ -353,6 +353,29 @@ impl Command<Recording> {
         self
     }
 
+    /// Blit an image into another image using a filter.
+    pub fn blit_image(self, info: ImageBlitInfo) -> Self {
+        let blits = info
+            .blits
+            .into_iter()
+            .map(|blit| vk::ImageBlit::from(blit))
+            .collect::<Vec<_>>();
+
+        unsafe {
+            self.device.logical().inner().cmd_blit_image(
+                self.inner,
+                info.src_image.inner(),
+                info.src_image_layout.into(),
+                info.dst_image.inner(),
+                info.dst_image_layout.into(),
+                &blits,
+                info.filter.into(),
+            );
+        }
+
+        self
+    }
+
     /// Stop recording commands. If you want to submit the commands, you need to
     /// call this method before submitting.
     pub fn stop_recording(self) -> Command<Executable> {
@@ -589,4 +612,38 @@ pub struct CommandSubmitInfo<'a> {
     /// The semaphore that the queue will wait on before executing the
     /// command.
     pub wait_semaphore: &'a [&'a Semaphore],
+}
+
+pub struct ImageBlit {
+    /// The source subresource.
+    pub src_subresource: ImageSubResourceLayer,
+
+    /// The source start and end coordinates.
+    pub src_offsets: [Offset3D; 2],
+
+    /// The destination subresource.
+    pub dst_subresource: ImageSubResourceLayer,
+
+    /// The destination start and end coordinates.
+    pub dst_offsets: [Offset3D; 2],
+}
+
+impl From<ImageBlit> for vk::ImageBlit {
+    fn from(blit: ImageBlit) -> Self {
+        vk::ImageBlit::builder()
+            .src_subresource(vk::ImageSubresourceLayers::from(blit.src_subresource))
+            .src_offsets(blit.src_offsets)
+            .dst_subresource(vk::ImageSubresourceLayers::from(blit.dst_subresource))
+            .dst_offsets(blit.dst_offsets)
+            .build()
+    }
+}
+
+pub struct ImageBlitInfo<'a> {
+    pub blits: Vec<ImageBlit>,
+    pub src_image: &'a Image,
+    pub dst_image: &'a Image,
+    pub src_image_layout: ImageLayout,
+    pub dst_image_layout: ImageLayout,
+    pub filter: MipmapFilter,
 }

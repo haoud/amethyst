@@ -180,14 +180,15 @@ fn main() {
     let (image, width, height) = load_image();
     let texture = Image::new(
         Arc::clone(&device),
+        &image,
         ImageCreateInfo {
+            mipmap_levels: MipmapLevel::None,
             usage: ImageUsage::SAMPLED | ImageUsage::TRANSFER_DST,
             format: ImageFormat::R8G8B8A8SRGB,
             extent: Extent2D {
                 height: height,
                 width: width,
             },
-            data: &image,
         },
     );
 
@@ -207,7 +208,7 @@ fn main() {
         },
     );
 
-    let texture_sampler = ImageSampler::new(Arc::clone(&device), ImageSamplerCreatInfo {});
+    let texture_sampler = ImageSampler::new(Arc::clone(&device), ImageSamplerCreatInfo::default());
 
     // Create a descriptor pool to allocate the descriptor sets, and create
     // a descriptor set from the descriptor pool with the uniform data buffer.

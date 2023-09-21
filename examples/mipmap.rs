@@ -1,7 +1,10 @@
-//! This example shows how to render a 3D cube with Amethyst. It use many
-//! different features of Amethyst, but the good news is that you have
-//! touched the most important features of Amethyst, and you can now start
-//! to create your own application.
+//! This example shows how to use mipmaps with textures. It will change the
+//! minimal and level of the texture sampler each frame, to progressively show
+//! the different mipmap levels.
+//! 
+//! Of course, this is simply an example, and a sane application would not
+//! change the minimal and maximal mipmap level of the texture sampler each
+//! frame.
 pub use amethyst::prelude::*;
 use std::sync::Arc;
 
@@ -13,123 +16,28 @@ struct UniformData {
     view: glm::Mat4,
 }
 
-/// The vertices of the cube. We need to duplicate the vertices because
-/// each vertex can have only one color. If we don't duplicate them, it
-/// will be impossible to have a cube with different colors on each face,
-/// and the cube will have faces with a ugly gradient color (trust me).
-static VERTICES: [Vertex3DColor; 24] = [
-    // Front face
-    Vertex3DColor {
-        position: [-0.5, -0.5, -0.5],
-        color: [1.0, 0.0, 0.0],
+/// The vertices of the rectangle
+static VERTICES: [Vertex3DTexture2D; 4] = [
+    Vertex3DTexture2D {
+        position: [-0.5, -0.5, 0.0],
+        texture: [1.0, 0.0],
     },
-    Vertex3DColor {
-        position: [0.5, -0.5, -0.5],
-        color: [1.0, 0.0, 0.0],
+    Vertex3DTexture2D {
+        position: [0.5, -0.5, 0.0],
+        texture: [0.0, 0.0],
     },
-    Vertex3DColor {
-        position: [0.5, 0.5, -0.5],
-        color: [1.0, 0.0, 0.0],
+    Vertex3DTexture2D {
+        position: [0.5, 0.5, 0.0],
+        texture: [0.0, 1.0],
     },
-    Vertex3DColor {
-        position: [-0.5, 0.5, -0.5],
-        color: [1.0, 0.0, 0.0],
-    },
-    // Back face
-    Vertex3DColor {
-        position: [-0.5, -0.5, 0.5],
-        color: [0.0, 1.0, 0.0],
-    },
-    Vertex3DColor {
-        position: [0.5, -0.5, 0.5],
-        color: [0.0, 1.0, 0.0],
-    },
-    Vertex3DColor {
-        position: [0.5, 0.5, 0.5],
-        color: [0.0, 1.0, 0.0],
-    },
-    Vertex3DColor {
-        position: [-0.5, 0.5, 0.5],
-        color: [0.0, 1.0, 0.0],
-    },
-    // Top face
-    Vertex3DColor {
-        position: [-0.5, 0.5, -0.5],
-        color: [0.0, 0.0, 1.0],
-    },
-    Vertex3DColor {
-        position: [0.5, 0.5, -0.5],
-        color: [0.0, 0.0, 1.0],
-    },
-    Vertex3DColor {
-        position: [0.5, 0.5, 0.5],
-        color: [0.0, 0.0, 1.0],
-    },
-    Vertex3DColor {
-        position: [-0.5, 0.5, 0.5],
-        color: [0.0, 0.0, 1.0],
-    },
-    // Bottom face
-    Vertex3DColor {
-        position: [-0.5, -0.5, -0.5],
-        color: [1.0, 1.0, 0.0],
-    },
-    Vertex3DColor {
-        position: [0.5, -0.5, -0.5],
-        color: [1.0, 1.0, 0.0],
-    },
-    Vertex3DColor {
-        position: [0.5, -0.5, 0.5],
-        color: [1.0, 1.0, 0.0],
-    },
-    Vertex3DColor {
-        position: [-0.5, -0.5, 0.5],
-        color: [1.0, 1.0, 0.0],
-    },
-    // Right face
-    Vertex3DColor {
-        position: [0.5, -0.5, -0.5],
-        color: [0.0, 1.0, 1.0],
-    },
-    Vertex3DColor {
-        position: [0.5, 0.5, -0.5],
-        color: [0.0, 1.0, 1.0],
-    },
-    Vertex3DColor {
-        position: [0.5, 0.5, 0.5],
-        color: [0.0, 1.0, 1.0],
-    },
-    Vertex3DColor {
-        position: [0.5, -0.5, 0.5],
-        color: [0.0, 1.0, 1.0],
-    },
-    // Left face
-    Vertex3DColor {
-        position: [-0.5, -0.5, -0.5],
-        color: [1.0, 0.0, 1.0],
-    },
-    Vertex3DColor {
-        position: [-0.5, 0.5, -0.5],
-        color: [1.0, 0.0, 1.0],
-    },
-    Vertex3DColor {
-        position: [-0.5, 0.5, 0.5],
-        color: [1.0, 0.0, 1.0],
-    },
-    Vertex3DColor {
-        position: [-0.5, -0.5, 0.5],
-        color: [1.0, 0.0, 1.0],
+    Vertex3DTexture2D {
+        position: [-0.5, 0.5, 0.0],
+        texture: [1.0, 1.0],
     },
 ];
 
-static INDICES: [u16; 36] = [
-    0, 1, 2, 2, 3, 0, // Front face
-    4, 5, 6, 6, 7, 4, // Back face
-    8, 9, 10, 10, 11, 8, // Top face
-    12, 13, 14, 14, 15, 12, // Bottom face
-    16, 17, 18, 18, 19, 16, // Right face
-    20, 21, 22, 22, 23, 20, // Left face
-];
+/// The indices of the rectangle
+static INDICES: [u16; 6] = [0, 1, 2, 2, 3, 0];
 
 fn main() {
     env_logger::builder()
@@ -145,7 +53,7 @@ fn main() {
     let window = Window::new(
         &mut engine,
         WindowInfo {
-            title: "Amethyst 3D cube",
+            title: "Amethyst textured rectangle",
             ..Default::default()
         },
     );
@@ -175,19 +83,33 @@ fn main() {
         },
     );
 
+    // Get the height and width of the swapchain. This should be the same
+    // as the window's height and width, but it may be different in some
+    // cases.
     let height = swapchain.extent().height as f32;
     let width = swapchain.extent().width as f32;
 
     let descriptor_layout = DescriptorSetLayout::new(
         Arc::clone(&device),
-        &[DescriptorSetLayoutBinding {
-            descriptor_type: DescriptorType::Uniform,
-            shader_stages: ShaderStages::VERTEX,
-            binding: 0,
-        }],
+        &[
+            // The uniform buffer, located at binding 0 and used by the
+            // vertex shader.
+            DescriptorSetLayoutBinding {
+                descriptor_type: DescriptorType::Uniform,
+                shader_stages: ShaderStages::VERTEX,
+                binding: 0,
+            },
+            // The texture sampler, located at binding 1 and used by the
+            // fragment shader.
+            DescriptorSetLayoutBinding {
+                descriptor_type: DescriptorType::Sampler,
+                shader_stages: ShaderStages::FRAGMENT,
+                binding: 1,
+            },
+        ],
     );
 
-    let pipeline = Pipeline::new::<Vertex3DColor>(
+    let pipeline = Pipeline::new::<Vertex3DTexture2D>(
         Arc::clone(&device),
         &swapchain,
         PipelineCreateInfo {
@@ -196,7 +118,7 @@ fn main() {
                     Arc::clone(&device),
                     ShaderCompileInfo {
                         language: ShaderSourceType::GLSL,
-                        source: ShaderSource::File("examples/shaders/rotating.vert"),
+                        source: ShaderSource::File("examples/shaders/texture.vert"),
                         kind: ShaderType::Vertex,
                         ..Default::default()
                     },
@@ -205,7 +127,7 @@ fn main() {
                     Arc::clone(&device),
                     ShaderCompileInfo {
                         language: ShaderSourceType::GLSL,
-                        source: ShaderSource::File("examples/shaders/rotating.frag"),
+                        source: ShaderSource::File("examples/shaders/texture.frag"),
                         kind: ShaderType::Fragment,
                         ..Default::default()
                     },
@@ -213,59 +135,14 @@ fn main() {
             ],
 
             descriptor_set_layouts: vec![descriptor_layout],
-
-            /// Disable the culling because the cube has some clockwise and
-            /// counter-clockwise faces, and I'm too lazy to fix it now.
             cull_mode: CullMode::None,
-
-            /// The format of the depth buffer. Theoricaly, we should to verify
-            /// if this format is supported by the device, but this format is
-            /// almost always supported by Vulkan implementations.
-            depth_format: ImageFormat::D32SFLOAT,
-
-            // Enable writing to the depth buffer when rendering.
-            depth_write: true,
-
-            // Enable depth testing. The depth test is used to discard the
-            // fragments that are behind other fragments.
-            depth_test: true,
-
             ..Default::default()
-        },
-    );
-
-    // Create the depth buffer. The depth buffer (or depth image) has the
-    // same size as the swapchain images. We don't need to provide data
-    // because we will never read from the depth buffer before writing to
-    // it.
-    let depth_image = Image::empty(
-        Arc::clone(&device),
-        ImageCreateInfo {
-            mipmap_levels: MipmapLevel::None,
-            usage: ImageUsage::DEPTH_STENCIL_ATTACHMENT,
-            format: ImageFormat::D32SFLOAT,
-            extent: swapchain.extent(),
-        },
-    );
-
-    // Create the depth buffer view. The depth buffer view is used to
-    // describe how to access the depth image.
-    let depth_view = ImageView::new(
-        Arc::clone(&device),
-        &depth_image,
-        ImageViewCreateInfo {
-            subresource: ImageSubResourceRange {
-                aspect_mask: ImageAspectFlags::DEPTH,
-                ..Default::default()
-            },
-            format: ImageFormat::D32SFLOAT,
-            kind: ImageViewKind::Type2D,
         },
     );
 
     let camera = Camera::new(CameraCreateInfo {
         direction: glm::vec3(0.0, 0.0, 0.0),
-        position: glm::vec3(1.0, 1.0, 1.0),
+        position: glm::vec3(0.5, 0.5, 0.5),
         height: height,
         width: width,
         ..Default::default()
@@ -305,17 +182,58 @@ fn main() {
         },
     );
 
+    let (image, width, height) = load_image("examples/resources/texture.png");
+    let texture = Image::new(
+        Arc::clone(&device),
+        &image,
+        ImageCreateInfo {
+            mipmap_levels: MipmapLevel::Auto,
+            usage: ImageUsage::SAMPLED | ImageUsage::TRANSFER_SRC | ImageUsage::TRANSFER_DST,
+            format: ImageFormat::R8G8B8A8SRGB,
+            extent: Extent2D {
+                height: height,
+                width: width,
+            },
+        },
+    );
+
+    let texture_view = ImageView::new(
+        Arc::clone(&device),
+        &texture,
+        ImageViewCreateInfo {
+            subresource: ImageSubResourceRange {
+                aspect_mask: ImageAspectFlags::COLOR,
+                base_array_layer: 0,
+                base_mip_level: 0,
+                level_count: texture.mipmap_levels(),
+                layer_count: 1,
+            },
+            format: ImageFormat::R8G8B8A8SRGB,
+            kind: ImageViewKind::Type2D,
+        },
+    );
+
+
+    // Create a descriptor pool to allocate the descriptor sets, and create
+    // a descriptor set from the descriptor pool with the uniform data buffer.
     let descriptor_pool = Arc::new(DescriptorPool::new(
         Arc::clone(&device),
-        &[DescriptorPoolCreateInfo {
-            descriptor_type: DescriptorType::Uniform,
-            descriptor_count: 32,
-            ..Default::default()
-        }],
+        &[
+            DescriptorPoolCreateInfo {
+                descriptor_count: swapchain.images().len() as u32,
+                descriptor_type: DescriptorType::Uniform,
+            },
+            DescriptorPoolCreateInfo {
+                descriptor_count: swapchain.images().len() as u32,
+                descriptor_type: DescriptorType::Sampler,
+            },
+        ],
     ));
 
     let descriptor_set = DescriptorSet::new(Arc::clone(&device), descriptor_pool, &pipeline);
     descriptor_set.update_buffer(0, &uniform_buffer);
+    // We does not need to update the texture sampler here, as it will be updated
+    // in the main loop, each frame.
 
     let acquire_semaphore = Semaphore::new(Arc::clone(&device));
     let render_semaphore = Semaphore::new(Arc::clone(&device));
@@ -328,12 +246,27 @@ fn main() {
                 let image_view = &swapchain.images_views()[image_index as usize];
                 let image = &swapchain.images()[image_index as usize];
 
-                let model = glm::rotate(
-                    &glm::identity(),
-                    start.elapsed().as_secs_f32() * 0.5 * glm::radians(&glm::vec1(90.0))[0],
-                    &glm::vec3(1.0, 1.0, 0.0),
+                // Update the texture sampler with the new mipmap level, and update
+                // the descriptor set with the new sampler.
+                let texture_sampler = ImageSampler::new(
+                    Arc::clone(&device),
+                    ImageSamplerCreatInfo {
+                        min_lod: (start.elapsed().as_secs_f32() % texture.mipmap_levels() as f32),
+                        max_lod: texture.mipmap_levels() as f32,
+                        ..Default::default()
+                    },
                 );
 
+                descriptor_set.update_image(
+                    1,
+                    ImageDescriptorInfo {
+                        layout: ImageLayout::ShaderReadOnlyOptimal,
+                        sampler: &texture_sampler,
+                        view: &texture_view,
+                    },
+                );
+
+                // Create a new command buffer from the command pool.
                 let command = Command::new(
                     Arc::clone(&device),
                     CommandCreateInfo {
@@ -341,13 +274,15 @@ fn main() {
                     },
                 );
 
+                // Record the command buffer and submit it to the graphic queue.
                 command
                     .start_recording()
+                    // Update the uniform buffer with the new model matrix.
                     .update_buffer(
                         &uniform_buffer,
                         &[UniformData {
                             projection: camera.projection().clone(),
-                            model: model,
+                            model: glm::identity(),
                             view: camera.view(),
                         }],
                     )
@@ -363,26 +298,6 @@ fn main() {
                             image: image,
                         }],
                     })
-                    // Transition the depth buffer from an undefined layout to a
-                    // depth attachment layout, and specify that we will read and
-                    // write to the depth buffer during the EARLY_FRAGMENT_TESTS
-                    // pipeline stage.
-                    .pipeline_barrier(PipelineBarrierInfo {
-                        src_stage_mask: PipelineStage::TOP_OF_PIPE,
-                        dst_stage_mask: PipelineStage::EARLY_FRAGMENT_TESTS,
-                        images_barriers: vec![ImageBarrier {
-                            subresource_range: ImageSubResourceRange {
-                                aspect_mask: ImageAspectFlags::DEPTH,
-                                ..Default::default()
-                            },
-                            src_access_mask: ImageAccess::UNDEFINED,
-                            dst_access_mask: ImageAccess::DEPTH_STENCIL_ATTACHMENT_READ
-                                | ImageAccess::DEPTH_STENCIL_ATTACHMENT_WRITE,
-                            old_layout: ImageLayout::Undefined,
-                            new_layout: ImageLayout::DepthStencilAttachmentOptimal,
-                            image: &depth_image,
-                        }],
-                    })
                     .bind_graphics_pipeline(&pipeline)
                     .bind_vertex_buffers(&vertices_buffer)
                     .bind_indices_buffers(&indices_buffer, IndicesType::U16)
@@ -396,16 +311,7 @@ fn main() {
                             store_op: AttachmentStoreOp::Store,
                             clear_value: ClearValue::Color([0.0, 0.0, 0.0, 1.0]),
                         }],
-                        // Attach the depth buffer to the rendering. The depth buffer
-                        // will be cleared before the rendering with the specified clear
-                        // value below (1.0).
-                        depth_attachement: Some(RenderingAttachementInfo {
-                            image_view: &depth_view,
-                            image_layout: ImageLayout::DepthStencilAttachmentOptimal,
-                            load_op: AttachmentLoadOp::Clear,
-                            store_op: AttachmentStoreOp::Discard,
-                            clear_value: ClearValue::DepthStencil(1.0, 0),
-                        }),
+                        depth_attachement: None,
                     })
                     .draw_indexed(DrawIndexedCommandInfo {
                         index_count: INDICES.len() as u32,
@@ -452,4 +358,24 @@ fn main() {
             WindowEvent::Exit => Status::Exit,
         }
     })
+}
+
+/// Loads the image from the disk and returns the pixels, width and height.
+pub fn load_image(file: &str) -> (Vec<u8>, u32, u32) {
+    let file =
+        std::fs::File::open(file).expect("Failed to open PNG file");
+
+    let decoder = png::Decoder::new(file);
+    let mut reader = decoder
+        .read_info()
+        .expect("Failed to read PNG info");
+
+    let mut pixels = vec![0; reader.info().raw_bytes()];
+
+    reader
+        .next_frame(&mut pixels)
+        .expect("Failed to read PNG pixels");
+
+    let (width, height) = reader.info().size();
+    (pixels, width, height)
 }

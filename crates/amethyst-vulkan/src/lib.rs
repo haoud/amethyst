@@ -259,3 +259,6 @@ extern "system" fn vulkan_debug_callback(
     }
     vk::FALSE
 }
+
+pub type Offset2D = vk::Offset2D;
+pub type Offset3D = vk::Offset3D;

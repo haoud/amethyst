@@ -81,7 +81,7 @@ impl Swapchain {
                 .get_swapchain_images_khr(swapchain)
                 .expect("Failed to get swapchain images")
                 .into_iter()
-                .map(|image| Image::raw(image, ImageMemory::Swapchain))
+                .map(|image| Image::raw(image, ImageMemory::Swapchain, 1))
                 .collect::<Vec<_>>()
         };
 
