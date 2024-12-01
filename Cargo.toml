@@ -1,0 +1,27 @@
+[package]
+edition = "2021"
+name = "amesthyst"
+version = "0.1.0"
+
+[workspace]
+members = [
+  "crates/*",
+]
+
+[workspace.dependencies.bevy]
+default-features = false
+features = [
+  "dynamic_linking",
+  "multi_threaded",
+  "bevy_window",
+  "bevy_winit",
+  "x11",
+]
+version = "0.15"
+
+[dependencies]
+amethyst = {path = "crates/amethyst-internal", package = "amethyst-internal"}
+bevy = {workspace = true}
+
+[profile.dev]
+opt-level = 1

@@ -1,0 +1,8 @@
+[package]
+edition = "2021"
+name = "amethyst-internal"
+version = "0.1.0"
+
+[dependencies]
+amethyst-vulkan = {path = "../amethyst-vulkan"}
+bevy = {workspace = true}
