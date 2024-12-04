@@ -1,4 +1,4 @@
-use amethyst::prelude::*;
+use amethyst::{prelude::*, vulkan::vulkan::VulkanPlugin};
 use bevy::prelude::*;
 
 /// This example illustrates how to create a simple amethyst application with a
@@ -9,5 +9,6 @@ pub fn main() {
     App::new()
         .add_plugins(DefaultPlugins)
         .add_plugins(PlayerPlugin)
+        .add_plugins(VulkanPlugin)
         .run();
 }
