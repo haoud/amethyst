@@ -1,5 +1,6 @@
 pub mod context;
 pub mod device;
+pub mod shader;
 pub mod swapchain;
 
 /// The maximum number of frames that can be in flight at once.
