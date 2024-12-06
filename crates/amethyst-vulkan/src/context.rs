@@ -1,4 +1,5 @@
-use bevy::{prelude::*, window::ThreadLockedRawWindowHandleWrapper};
+use bevy::prelude::*;
+use raw_window_handle::HasWindowHandle;
 use std::{borrow::Cow, collections::HashSet, ffi::CStr};
 use vk::ExtDebugUtilsExtension;
 use vulkanalia::{
@@ -40,7 +41,7 @@ pub struct VulkanContext {
 
 impl VulkanContext {
     #[must_use]
-    pub fn new(handle: &ThreadLockedRawWindowHandleWrapper) -> Self {
+    pub fn new(handle: impl HasWindowHandle) -> Self {
         let entry = unsafe {
             let loader = LibloadingLoader::new(LIBRARY).expect("Failed to load Vulkan loader");
             Entry::new(loader).expect("Failed to load Vulkan entry point")

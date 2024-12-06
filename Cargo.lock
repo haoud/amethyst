@@ -102,6 +102,15 @@ dependencies = [
 name = "amethyst-internal"
 version = "0.1.0"
 dependencies = [
+ "amethyst-render",
+ "amethyst-vulkan",
+ "bevy",
+]
+
+[[package]]
+name = "amethyst-render"
+version = "0.1.0"
+dependencies = [
  "amethyst-vulkan",
  "bevy",
 ]
@@ -113,6 +122,7 @@ dependencies = [
  "bevy",
  "bitflags 2.6.0",
  "log",
+ "raw-window-handle",
  "shaderc",
  "vulkanalia",
  "vulkanalia-vma",
