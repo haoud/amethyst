@@ -1,6 +1,14 @@
-use crate::context::{VulkanContext, ENABLE_VALIDATION, VALIDATION_LAYER};
+use crate::{
+    context::{VulkanContext, ENABLE_VALIDATION, VALIDATION_LAYER},
+    swapchain::Surface,
+};
 use bevy::prelude::*;
+use std::collections::HashSet;
+use vk::KhrSurfaceExtension;
 use vulkanalia::prelude::v1_3::*;
+
+/// The device extensions required by Amethyst.
+const DEVICE_EXTENSIONS: &[vk::ExtensionName] = &[vk::KHR_SWAPCHAIN_EXTENSION.name];
 
 /// The Vulkan device. This contains the physical device chosen by Amethyst, the logical device
 /// created from the physical device, and information about the queues of the device.
@@ -23,7 +31,7 @@ pub struct VulkanDevice {
 impl VulkanDevice {
     /// Choose the best physical device and create a logical device from it.
     #[must_use]
-    pub fn pick_best(context: &VulkanContext) -> Self {
+    pub fn pick_best(context: &VulkanContext, surface: &Surface) -> Self {
         let physical = unsafe {
             let mut devices = context
                 .instance()
@@ -53,7 +61,9 @@ impl VulkanDevice {
             // be the best physical device for the application.
             devices
                 .into_iter()
-                .find(|(_, _, _)| true)
+                .find(|(device, properties, features)| {
+                    Self::suitable_device(context, device, properties, features)
+                })
                 .expect("No suitable physical device found")
                 .0
         };
@@ -61,37 +71,36 @@ impl VulkanDevice {
         // Retrieve the queues from the logical device. Try to get separate
         // queues for performance reasons, but fall back to a single queue
         // if separate queues are not available.
-        let queues_info = DeviceQueueInfo::new(context, physical);
+        let queues_info = DeviceQueueInfo::new(context, physical, surface);
 
         // Add the main queue family to the list of queues to create. Since Amethyst
         // only use one queue per queue family, the queue priority does not really
         // matter here and can be set to 1.0.
         let queue_priorities = [1.0];
-        let mut queues_create_info = vec![vk::DeviceQueueCreateInfo::builder()
-            .queue_family_index(queues_info.main_family())
-            .queue_priorities(&queue_priorities)
-            .build()];
 
-        // Add the async transfer queue family to the list of queues to create
-        if let Some(async_transfer) = queues_info.async_transfer_family() {
-            queues_create_info.push(
-                vk::DeviceQueueCreateInfo::builder()
-                    .queue_family_index(async_transfer)
-                    .queue_priorities(&queue_priorities)
-                    .build(),
-            );
-        }
+        // Create a set of queue families that should be created. This avoid trying to create
+        // request the same queue family multiple times, which is not allowed by Vulkan.
+        let queues_family_set = HashSet::from([
+            queues_info.main_family(),
+            queues_info.present_family(),
+            queues_info
+                .async_compute_family()
+                .unwrap_or(queues_info.main_family()),
+            queues_info
+                .async_transfer_family()
+                .unwrap_or(queues_info.main_family()),
+        ]);
 
-        // Add the async compute queue family to the list of queues to create
-        // if it is different from the async transfer queue family.
-        if queues_info.has_separate_async_compute_transfer() {
-            queues_create_info.push(
+        // Create the queue create info for each queue family needed.
+        let queues_create_info = queues_family_set
+            .into_iter()
+            .map(|family| {
                 vk::DeviceQueueCreateInfo::builder()
-                    .queue_family_index(queues_info.async_compute_family().unwrap())
+                    .queue_family_index(family)
                     .queue_priorities(&queue_priorities)
-                    .build(),
-            );
-        }
+                    .build()
+            })
+            .collect::<Vec<_>>();
 
         // Add the validation layer to the list of layers to enable if validation is enabled.
         let layers_names = if ENABLE_VALIDATION {
@@ -103,7 +112,10 @@ impl VulkanDevice {
         // The list of extensions to enable for the logical device. This should include the
         // swapchain extension, as it is required for rendering to the screen. Then, create the
         // device create info with the queues, extensions, layers, and features.
-        let extensions = vec![vk::KHR_SWAPCHAIN_EXTENSION.name.as_ptr()];
+        let extensions = DEVICE_EXTENSIONS
+            .iter()
+            .map(|e| e.as_ptr())
+            .collect::<Vec<_>>();
         let features = vk::PhysicalDeviceFeatures::builder();
         let device_create_info = vk::DeviceCreateInfo::builder()
             .enabled_extension_names(&extensions)
@@ -125,6 +137,33 @@ impl VulkanDevice {
             logical,
             queues_info,
         }
+    }
+
+    /// Verify if the physical device is suitable for the application. This checks if the physical
+    /// device supports all the required features, capabilities, and extensions needed by Amethyst.
+    pub fn suitable_device(
+        context: &VulkanContext,
+        device: &vk::PhysicalDevice,
+        _properties: &vk::PhysicalDeviceProperties,
+        _features: &vk::PhysicalDeviceFeatures,
+    ) -> bool {
+        // Get all the extensions supported by the physical device.
+        let extensions = unsafe {
+            context
+                .instance()
+                .enumerate_device_extension_properties(*device, None)
+                .expect("Failed to enumerate device extensions")
+                .iter()
+                .map(|e| e.extension_name)
+                .collect::<HashSet<_>>()
+        };
+
+        // Check if the physical device supports all the required extensions.
+        if !DEVICE_EXTENSIONS.iter().all(|e| extensions.contains(e)) {
+            return false;
+        }
+
+        true
     }
 
     /// Returns the vulkan physical device object.
@@ -159,7 +198,8 @@ impl Drop for VulkanDevice {
 /// transfer and compute operations, respectively.
 #[derive(Debug)]
 pub struct DeviceQueueInfo {
-    graphics_compute_transfer: u32,
+    main: u32,
+    present: u32,
     async_transfer: Option<u32>,
     async_compute: Option<u32>,
 }
@@ -169,7 +209,7 @@ impl DeviceQueueInfo {
     /// that supports graphics, compute, and transfer operations, and try to find async transfer
     /// and async compute queues that support transfer and compute operations, respectively.
     #[must_use]
-    pub fn new(context: &VulkanContext, device: vk::PhysicalDevice) -> Self {
+    pub fn new(context: &VulkanContext, device: vk::PhysicalDevice, surface: &Surface) -> Self {
         let families = unsafe {
             context
                 .instance()
@@ -195,6 +235,20 @@ impl DeviceQueueInfo {
             .map(|(index, _)| index)
             .expect("No main queue family found");
 
+        // Find a queue family that supports presenting to the surface. This is used for
+        // presenting the rendered images to the screen. It may be the same as the main queue,
+        // but this does not really matter for most applications.
+        let present = families
+            .iter()
+            .find(|(index, _)| unsafe {
+                context
+                    .instance()
+                    .get_physical_device_surface_support_khr(device, *index, surface.inner())
+                    .expect("Failed to get surface support")
+            })
+            .map(|(index, _)| *index)
+            .expect("No present queue family found");
+
         // Try to find a queue family that supports transfer operations, but is not the main queue
         // family. This is used for async transfer operations alongside graphics and compute
         // operations, enabling parallelism between transfer and graphics/compute operations.
@@ -214,7 +268,8 @@ impl DeviceQueueInfo {
             .copied();
 
         Self {
-            graphics_compute_transfer: *main,
+            main: *main,
+            present,
             async_transfer,
             async_compute,
         }
@@ -262,11 +317,18 @@ impl DeviceQueueInfo {
         self.async_compute
     }
 
+    /// Returns the present queue family index, which supports presenting to the surface.
+    /// This is used for presenting the rendered images to the screen.
+    #[must_use]
+    pub const fn present_family(&self) -> u32 {
+        self.present
+    }
+
     /// Returns the main queue family index, which supports graphics, compute, and
     /// transfer operations. This is the main queue family used for most operations.
     #[must_use]
     pub const fn main_family(&self) -> u32 {
-        self.graphics_compute_transfer
+        self.main
     }
 }
 
@@ -277,6 +339,7 @@ impl DeviceQueueInfo {
 #[derive(Debug, Resource)]
 pub struct VulkanQueues {
     main: vk::Queue,
+    present: vk::Queue,
     async_transfer: Option<vk::Queue>,
     async_compute: Option<vk::Queue>,
 }
@@ -298,6 +361,12 @@ impl VulkanQueues {
                 .get_device_queue(device.queues_info().main_family(), 0)
         };
 
+        let present = unsafe {
+            device
+                .logical()
+                .get_device_queue(device.queues_info().present_family(), 0)
+        };
+
         let async_transfer = device
             .queues_info()
             .async_transfer_family()
@@ -310,6 +379,7 @@ impl VulkanQueues {
 
         Self {
             main,
+            present,
             async_transfer,
             async_compute,
         }
@@ -320,6 +390,12 @@ impl VulkanQueues {
     #[must_use]
     pub const fn main(&self) -> vk::Queue {
         self.main
+    }
+
+    /// Returns the present queue that supports presenting to the surface.
+    #[must_use]
+    pub const fn present(&self) -> vk::Queue {
+        self.present
     }
 
     /// Returns the async transfer queue that supports transfer operations but is not the main queue.

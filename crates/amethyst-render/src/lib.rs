@@ -1,6 +1,7 @@
 use amethyst_vulkan::{
     context::VulkanContext,
     device::{VulkanDevice, VulkanQueues},
+    swapchain::{Surface, VulkanSwapchain},
 };
 use bevy::{
     prelude::*,
@@ -19,6 +20,7 @@ impl Plugin for AmethystRender {
 
 #[derive(Debug, Resource)]
 pub struct Render {
+    swapchain: VulkanSwapchain,
     queues: VulkanQueues,
     device: Arc<VulkanDevice>,
     context: Arc<VulkanContext>,
@@ -42,13 +44,17 @@ fn create_vulkan_context(
     // safely get the handle in any platform.
     let handle = unsafe { handle.get_handle() };
 
-    let context = VulkanContext::new(&handle);
-    let device = VulkanDevice::pick_best(&context);
+    let context = Arc::new(VulkanContext::new(&handle));
+    let surface = Surface::new(Arc::clone(&context), handle);
+
+    let device = Arc::new(VulkanDevice::pick_best(&context, &surface));
+    let swapchain = VulkanSwapchain::new(Arc::clone(&context), Arc::clone(&device), surface);
     let queues = VulkanQueues::fetch(&device);
 
     command.insert_resource(Render {
-        context: Arc::new(context),
-        device: Arc::new(device),
+        context,
+        device,
+        swapchain,
         queues,
     });
 }
