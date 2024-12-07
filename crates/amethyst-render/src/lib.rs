@@ -1,6 +1,8 @@
 use amethyst_vulkan::{
     context::VulkanContext,
     device::{VulkanDevice, VulkanQueues},
+    pipeline::{NoVertex, Pipeline, PipelineCreateInfo},
+    shader::{ShaderModule, ShaderType},
     swapchain::{Surface, VulkanSwapchain},
 };
 use bevy::{
@@ -18,8 +20,10 @@ impl Plugin for AmethystRender {
     }
 }
 
+#[allow(dead_code)]
 #[derive(Debug, Resource)]
 pub struct Render {
+    pipeline: Pipeline,
     swapchain: VulkanSwapchain,
     queues: VulkanQueues,
     device: Arc<VulkanDevice>,
@@ -51,10 +55,39 @@ fn create_vulkan_context(
     let swapchain = VulkanSwapchain::new(Arc::clone(&context), Arc::clone(&device), surface);
     let queues = VulkanQueues::fetch(&device);
 
+    // Create a pipeline object that does not require vertex data and
+    // use a simple vertex and fragment shader. Since we are trying to
+    // render a simple triangle, we don't need to pass any vertex data
+    // to the vertex shader (hence the `NoVertex` type) and we also don't
+    // need to write to the depth buffer.
+    let pipeline = Pipeline::new::<NoVertex>(
+        Arc::clone(&device),
+        &swapchain,
+        PipelineCreateInfo {
+            shaders: vec![
+                ShaderModule::compile_glsl(
+                    Arc::clone(&device),
+                    ShaderType::Vertex,
+                    include_str!("../shaders/vertex.glsl").to_string(),
+                ),
+                ShaderModule::compile_glsl(
+                    Arc::clone(&device),
+                    ShaderType::Fragment,
+                    include_str!("../shaders/fragment.glsl").to_string(),
+                ),
+            ],
+
+            depth_write: false,
+            depth_test: false,
+            ..Default::default()
+        },
+    );
+
     command.insert_resource(Render {
         context,
         device,
         swapchain,
         queues,
+        pipeline,
     });
 }

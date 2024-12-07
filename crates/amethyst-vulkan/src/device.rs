@@ -116,12 +116,16 @@ impl VulkanDevice {
             .iter()
             .map(|e| e.as_ptr())
             .collect::<Vec<_>>();
-        let features = vk::PhysicalDeviceFeatures::builder();
+        let features = vk::PhysicalDeviceFeatures::builder().sampler_anisotropy(true);
+        let mut feature_1_3 = vk::PhysicalDeviceVulkan13Features::builder()
+            .dynamic_rendering(true)
+            .synchronization2(true);
         let device_create_info = vk::DeviceCreateInfo::builder()
             .enabled_extension_names(&extensions)
             .enabled_layer_names(&layers_names)
             .queue_create_infos(&queues_create_info)
-            .enabled_features(&features);
+            .enabled_features(&features)
+            .push_next(&mut feature_1_3);
 
         // Create the logical device from the physical device,
         // queue info, and device features.
@@ -163,6 +167,7 @@ impl VulkanDevice {
             return false;
         }
 
+        // TODO: Verify that extensions like dynamic rendering and synchronization2 are supported
         true
     }
 

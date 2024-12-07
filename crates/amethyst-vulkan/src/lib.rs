@@ -1,5 +1,6 @@
 pub mod context;
 pub mod device;
+pub mod pipeline;
 pub mod shader;
 pub mod swapchain;
 

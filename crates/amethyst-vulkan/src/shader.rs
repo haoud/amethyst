@@ -13,6 +13,7 @@ use vulkanalia::prelude::v1_3::*;
 pub struct ShaderModule {
     device: Arc<VulkanDevice>,
     inner: vk::ShaderModule,
+    kind: ShaderType,
 }
 
 impl ShaderModule {
@@ -43,13 +44,23 @@ impl ShaderModule {
                 .expect("Failed to create the shader module")
         };
 
-        Self { device, inner }
+        Self {
+            device,
+            inner,
+            kind,
+        }
     }
 
     /// Returns the raw Vulkan handle of the shader module.
     #[must_use]
     pub fn inner(&self) -> vk::ShaderModule {
         self.inner
+    }
+
+    /// Returns the type of the shader.
+    #[must_use]
+    pub fn kind(&self) -> ShaderType {
+        self.kind
     }
 }
 
