@@ -7,7 +7,14 @@ use bevy::prelude::*;
 /// addition of the `PlayerPlugin` which adds a player to the scene.
 pub fn main() {
     App::new()
-        .add_plugins(DefaultPlugins)
+        .add_plugins(DefaultPlugins.set(WindowPlugin {
+            primary_window: Some(Window {
+                resolution: (800.0, 600.0).into(),
+                title: "Amesthyst".to_string(),
+                ..default()
+            }),
+            ..default()
+        }))
         .add_plugins(PlayerPlugin)
         .add_plugins(AmethystRender)
         .run();

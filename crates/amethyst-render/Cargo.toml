@@ -3,6 +3,10 @@ edition = "2021"
 name = "amethyst-render"
 version = "0.1.0"
 
+[dependencies.vulkanalia]
+features = ["libloading", "window", "provisional"]
+version = "0.25"
+
 [dependencies]
 amethyst-vulkan = {path = "../amethyst-vulkan"}
 bevy = {workspace = true}

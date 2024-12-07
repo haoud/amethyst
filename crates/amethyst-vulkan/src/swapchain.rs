@@ -1,4 +1,4 @@
-use crate::{context::VulkanContext, device::VulkanDevice};
+use crate::{context::VulkanContext, device::VulkanDevice, semaphore::Semaphore};
 use raw_window_handle::{HasDisplayHandle, HasWindowHandle};
 use std::sync::Arc;
 use vk::{KhrSurfaceExtension, KhrSwapchainExtension};
@@ -228,6 +228,52 @@ impl VulkanSwapchain {
             images,
             views,
             inner: swapchain,
+        }
+    }
+
+    /// Acquire an image from the swapchain, and return its image index. The
+    /// index can be used to retrieve the image/image view from the swapchain
+    /// images/images views using the `images()` method.
+    #[must_use]
+    pub fn acquire_next_image_index(&self, semaphore: &Semaphore) -> u32 {
+        unsafe {
+            self.device
+                .logical()
+                .acquire_next_image_khr(
+                    self.inner,
+                    std::u64::MAX,
+                    semaphore.inner(),
+                    vk::Fence::null(),
+                )
+                .expect("Failed to acquire next image")
+                .0
+        }
+    }
+
+    /// Present an image to the surface. The image is identified by its index
+    /// in the swapchain images, and the semaphore parameter allows the presentation
+    /// to be synchronized with other operations.
+    ///
+    /// # Important
+    /// This function returns immediately after the presentation is submitted to the
+    /// queue. The actual presentation may not have been completed yet. To ensure that
+    /// the presentation is completed, you can use a fence or a semaphore to wait for
+    /// the presentation to be completed.
+    pub fn present_image(&self, queue: vk::Queue, image_index: u32, wait: &Semaphore) {
+        let wait_semaphores = [wait.inner()];
+        let image_indices = [image_index];
+        let swapchains = [self.inner];
+
+        let present_info = vk::PresentInfoKHR::builder()
+            .wait_semaphores(&wait_semaphores)
+            .image_indices(&image_indices)
+            .swapchains(&swapchains);
+
+        unsafe {
+            self.device
+                .logical()
+                .queue_present_khr(queue, &present_info)
+                .expect("Failed to present image");
         }
     }
 

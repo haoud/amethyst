@@ -4,7 +4,7 @@ use crate::{
     swapchain::VulkanSwapchain,
 };
 use std::sync::Arc;
-use vulkanalia::prelude::v1_2::*;
+use vulkanalia::prelude::v1_3::*;
 
 /// A pipeline object.
 #[derive(Debug)]
@@ -56,10 +56,10 @@ impl Pipeline {
         // Create the vertex input state and the vertex binding description from the vertex
         // type passed in the generic parameter and then create the vertex input state.
         let attribute_descriptions = T::attribute_descriptions();
-        let binding_descriptions = &[T::binding_description()];
+        let binding_descriptions = T::binding_description();
         let vertex_input_state = vk::PipelineVertexInputStateCreateInfo::builder()
             .vertex_attribute_descriptions(&attribute_descriptions)
-            .vertex_binding_descriptions(binding_descriptions);
+            .vertex_binding_descriptions(&binding_descriptions);
 
         // Create the input assembly state
         let input_assembly_state = vk::PipelineInputAssemblyStateCreateInfo::builder()
@@ -216,7 +216,7 @@ impl Default for PipelineCreateInfo {
     fn default() -> Self {
         Self {
             front_face: vk::FrontFace::COUNTER_CLOCKWISE,
-            cull_mode: vk::CullModeFlags::BACK,
+            cull_mode: vk::CullModeFlags::NONE,
             fill_mode: vk::PolygonMode::FILL,
             depth_format: vk::Format::UNDEFINED,
             depth_write: false,
@@ -233,7 +233,7 @@ impl Default for PipelineCreateInfo {
 /// This trait is unsafe because it requires the implementor to provide the exact layout of the
 /// vertex data in memory. If the layout is incorrect, it can lead to undefined behavior.
 pub unsafe trait VertexBindingDescription {
-    fn binding_description() -> vk::VertexInputBindingDescription;
+    fn binding_description() -> Vec<vk::VertexInputBindingDescription>;
 }
 
 /// Specify the type of the attributes passed to the vertex shader, which binding to load them
@@ -252,12 +252,8 @@ pub unsafe trait VertexAttributeDescription {
 pub struct NoVertex;
 
 unsafe impl VertexBindingDescription for NoVertex {
-    fn binding_description() -> vk::VertexInputBindingDescription {
-        vk::VertexInputBindingDescription::builder()
-            .input_rate(vk::VertexInputRate::VERTEX)
-            .binding(0)
-            .stride(0)
-            .build()
+    fn binding_description() -> Vec<vk::VertexInputBindingDescription> {
+        Vec::new()
     }
 }
 
