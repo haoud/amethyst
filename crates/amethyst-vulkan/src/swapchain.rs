@@ -234,6 +234,8 @@ impl VulkanSwapchain {
     /// Acquire an image from the swapchain, and return its image index. The
     /// index can be used to retrieve the image/image view from the swapchain
     /// images/images views using the `images()` method.
+    /// If no image is available, this function will block indefinitely until
+    /// an image is available.
     #[must_use]
     pub fn acquire_next_image_index(&self, semaphore: &Semaphore) -> u32 {
         unsafe {
@@ -248,6 +250,19 @@ impl VulkanSwapchain {
                 .expect("Failed to acquire next image")
                 .0
         }
+    }
+
+    /// Acquire an image from the swapchain, and return the image, its image view, and
+    /// its index. The image and image view can be used to render to the image, and the
+    /// index can be used to present the image to the surface.
+    /// If no image is available, this function will block indefinitely until an image
+    /// is available.
+    #[must_use]
+    pub fn acquire_next_image(&self, semaphore: &Semaphore) -> (u32, vk::Image, vk::ImageView) {
+        let index = self.acquire_next_image_index(semaphore);
+        let image = self.images[index as usize];
+        let view = self.views[index as usize];
+        (index, image, view)
     }
 
     /// Present an image to the surface. The image is identified by its index

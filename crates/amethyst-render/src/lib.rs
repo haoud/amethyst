@@ -1,5 +1,7 @@
 use amethyst_vulkan::{
-    command::{CommandBuffer, CommandPool},
+    command::{
+        CommandBuffer, CommandPool, DrawInfo, PipelineBarrierInfo, RenderingInfo, SubmitInfo,
+    },
     context::VulkanContext,
     device::{VulkanDevice, VulkanQueues},
     pipeline::{NoVertex, Pipeline, PipelineCreateInfo},
@@ -49,6 +51,7 @@ pub struct Render {
     device: Arc<VulkanDevice>,
 
     /// The Vulkan context object that holds the Vulkan instance
+    #[allow(dead_code)]
     context: Arc<VulkanContext>,
 }
 
@@ -72,11 +75,11 @@ fn create_vulkan_context(
 
     // Create the Vulkan context and surface objects
     let context = Arc::new(VulkanContext::new(&handle));
-    let surface = Surface::new(Arc::clone(&context), handle);
+    let surface = Surface::new(context.clone(), handle);
 
     // Create the device, swapchain, and queues objects
     let device = Arc::new(VulkanDevice::pick_best(&context, &surface));
-    let swapchain = VulkanSwapchain::new(Arc::clone(&context), Arc::clone(&device), surface);
+    let swapchain = VulkanSwapchain::new(context.clone(), device.clone(), surface);
     let queues = VulkanQueues::fetch(&device);
 
     // Create a pipeline object that does not require vertex data and
@@ -85,17 +88,17 @@ fn create_vulkan_context(
     // to the vertex shader (hence the `NoVertex` type) and we also don't
     // need to write to the depth buffer.
     let pipeline = Pipeline::new::<NoVertex>(
-        Arc::clone(&device),
+        device.clone(),
         &swapchain,
         PipelineCreateInfo {
             shaders: vec![
                 ShaderModule::compile_glsl(
-                    Arc::clone(&device),
+                    device.clone(),
                     ShaderType::Vertex,
                     include_str!("../shaders/vertex.glsl").to_string(),
                 ),
                 ShaderModule::compile_glsl(
-                    Arc::clone(&device),
+                    device.clone(),
                     ShaderType::Fragment,
                     include_str!("../shaders/fragment.glsl").to_string(),
                 ),
@@ -108,8 +111,8 @@ fn create_vulkan_context(
     );
 
     command.insert_resource(Render {
-        acquire_semaphore: Semaphore::new(Arc::clone(&device)),
-        render_semaphore: Semaphore::new(Arc::clone(&device)),
+        acquire_semaphore: Semaphore::new(device.clone()),
+        render_semaphore: Semaphore::new(device.clone()),
         context,
         device,
         swapchain,
@@ -120,165 +123,92 @@ fn create_vulkan_context(
 
 fn render(render: Res<Render>) {
     let command_pool = CommandPool::new(
-        Arc::clone(&render.device),
+        render.device.clone(),
         render.device.queues_info().main_family(),
         vk::CommandPoolCreateFlags::empty(),
     );
 
     let command = CommandBuffer::new(&command_pool);
 
-    let image_index = render
+    // Acquire the next image from the swapchain. If no image is available,
+    // this function wait until an image is available.
+    let (image_index, image, iview) = render
         .swapchain
-        .acquire_next_image_index(&render.acquire_semaphore);
-    let image = render.swapchain.images()[image_index as usize];
-    let iview = render.swapchain.image_views()[image_index as usize];
+        .acquire_next_image(&render.acquire_semaphore);
 
-    // Begin the command buffer recording
-    let begin_info = vk::CommandBufferBeginInfo::builder()
-        .flags(vk::CommandBufferUsageFlags::ONE_TIME_SUBMIT)
-        .build();
+    // SAFETY: Most of the following code is safe thank to our encapsulation
+    // of the Vulkan API. The only unsafe function call is the `draw` method
+    // call because the caller must ensure that the draw call parameters will
+    // not cause any out-of-bounds access of any buffer using behind the scenes.
     unsafe {
-        render
-            .device
-            .logical()
-            .begin_command_buffer(command.inner(), &begin_info)
-            .expect("Failed to begin command buffer");
-    }
-
-    // Transition the swapchain image to a layout that is suitable for rendering
-    let image_barrier = vk::ImageMemoryBarrier::builder()
-        .src_access_mask(vk::AccessFlags::empty())
-        .dst_access_mask(vk::AccessFlags::COLOR_ATTACHMENT_WRITE)
-        .old_layout(vk::ImageLayout::UNDEFINED)
-        .new_layout(vk::ImageLayout::COLOR_ATTACHMENT_OPTIMAL)
-        .image(image)
-        .subresource_range(vk::ImageSubresourceRange {
-            aspect_mask: vk::ImageAspectFlags::COLOR,
-            base_array_layer: 0,
-            base_mip_level: 0,
-            level_count: 1,
-            layer_count: 1,
-        });
-    let buffers_barriers: [vk::BufferMemoryBarrier; 0] = [];
-    let memories_barriers: [vk::MemoryBarrier; 0] = [];
-
-    unsafe {
-        render.device.logical().cmd_pipeline_barrier(
-            command.inner(),
-            vk::PipelineStageFlags::TOP_OF_PIPE,
-            vk::PipelineStageFlags::COLOR_ATTACHMENT_OUTPUT,
-            vk::DependencyFlags::empty(),
-            &memories_barriers,
-            &buffers_barriers,
-            &[image_barrier],
-        );
-    }
-
-    // Start the rendering using the dynamic rendering feature
-    unsafe {
-        let color_attachment = [vk::RenderingAttachmentInfo::builder()
-            .image_layout(vk::ImageLayout::COLOR_ATTACHMENT_OPTIMAL)
-            .store_op(vk::AttachmentStoreOp::STORE)
-            .load_op(vk::AttachmentLoadOp::CLEAR)
-            .clear_value(vk::ClearValue {
-                color: vk::ClearColorValue {
-                    float32: [0.0, 0.0, 0.0, 1.0],
-                },
+        command
+            .start_recording()
+            .pipeline_barrier(PipelineBarrierInfo {
+                src_stage_mask: vk::PipelineStageFlags::TOP_OF_PIPE,
+                dst_stage_mask: vk::PipelineStageFlags::COLOR_ATTACHMENT_OUTPUT,
+                images_barriers: vec![vk::ImageMemoryBarrier::builder()
+                    .src_access_mask(vk::AccessFlags::empty())
+                    .dst_access_mask(vk::AccessFlags::COLOR_ATTACHMENT_WRITE)
+                    .old_layout(vk::ImageLayout::UNDEFINED)
+                    .new_layout(vk::ImageLayout::COLOR_ATTACHMENT_OPTIMAL)
+                    .subresource_range(vk::ImageSubresourceRange {
+                        aspect_mask: vk::ImageAspectFlags::COLOR,
+                        base_array_layer: 0,
+                        base_mip_level: 0,
+                        level_count: 1,
+                        layer_count: 1,
+                    })
+                    .image(image)
+                    .build()],
             })
-            .image_view(iview)];
-
-        let render_area = vk::Rect2D::builder()
-            .extent(render.swapchain.extent())
-            .build();
-
-        let rendering_info = vk::RenderingInfo::builder()
-            .color_attachments(&color_attachment)
-            .render_area(render_area)
-            .layer_count(1);
-
-        render
-            .device
-            .logical()
-            .cmd_begin_rendering(command.inner(), &rendering_info);
-    }
-
-    // Bind the pipeline object to the command buffer
-    unsafe {
-        render.device.logical().cmd_bind_pipeline(
-            command.inner(),
-            vk::PipelineBindPoint::GRAPHICS,
-            render.pipeline.inner(),
-        );
-    }
-
-    // Draw the triangle
-    unsafe {
-        render
-            .device
-            .logical()
-            .cmd_draw(command.inner(), 3, 1, 0, 0);
-    }
-
-    // End the rendering
-    unsafe {
-        render.device.logical().cmd_end_rendering(command.inner());
-    }
-
-    // Transition the swapchain image to a layout that is suitable for presenting
-    // the image to the screen
-    let image_barrier = vk::ImageMemoryBarrier::builder()
-        .src_access_mask(vk::AccessFlags::COLOR_ATTACHMENT_WRITE)
-        .dst_access_mask(vk::AccessFlags::empty())
-        .old_layout(vk::ImageLayout::COLOR_ATTACHMENT_OPTIMAL)
-        .new_layout(vk::ImageLayout::PRESENT_SRC_KHR)
-        .image(image)
-        .subresource_range(vk::ImageSubresourceRange {
-            aspect_mask: vk::ImageAspectFlags::COLOR,
-            base_mip_level: 0,
-            level_count: 1,
-            base_array_layer: 0,
-            layer_count: 1,
-        });
-
-    unsafe {
-        render.device.logical().cmd_pipeline_barrier(
-            command.inner(),
-            vk::PipelineStageFlags::COLOR_ATTACHMENT_OUTPUT,
-            vk::PipelineStageFlags::BOTTOM_OF_PIPE,
-            vk::DependencyFlags::empty(),
-            &memories_barriers,
-            &buffers_barriers,
-            &[image_barrier],
-        );
-    }
-
-    // End the command buffer recording
-    unsafe {
-        render
-            .device
-            .logical()
-            .end_command_buffer(command.inner())
-            .expect("Failed to end command buffer");
-    }
-
-    // Submit the command buffer to the graphic queue
-    let command_buffers = [command.inner()];
-    let wait_semaphores = [render.acquire_semaphore.inner()];
-    let signal_semaphores = [render.render_semaphore.inner()];
-    let wait_dst_stage_mask = [vk::PipelineStageFlags::COLOR_ATTACHMENT_OUTPUT];
-    let submit_info = vk::SubmitInfo::builder()
-        .signal_semaphores(&signal_semaphores)
-        .wait_semaphores(&wait_semaphores)
-        .command_buffers(&command_buffers)
-        .wait_dst_stage_mask(&wait_dst_stage_mask);
-
-    unsafe {
-        render
-            .device
-            .logical()
-            .queue_submit(render.queues.main(), &[submit_info], vk::Fence::null())
-            .expect("Failed to submit command buffer to graphics queue");
-    }
+            .bind_graphic_pipeline(&render.pipeline)
+            .start_rendering(RenderingInfo {
+                colors_attachements: vec![vk::RenderingAttachmentInfo::builder()
+                    .image_layout(vk::ImageLayout::COLOR_ATTACHMENT_OPTIMAL)
+                    .store_op(vk::AttachmentStoreOp::STORE)
+                    .load_op(vk::AttachmentLoadOp::CLEAR)
+                    .clear_value(vk::ClearValue {
+                        color: vk::ClearColorValue {
+                            float32: [0.0, 0.0, 0.0, 1.0],
+                        },
+                    })
+                    .image_view(iview)
+                    .build()],
+                render_area: render.swapchain.extent(),
+            })
+            .draw(DrawInfo {
+                vertex_count: 3,
+                instance_count: 1,
+                first_vertex: 0,
+                first_instance: 0,
+            })
+            .stop_rendering()
+            .pipeline_barrier(PipelineBarrierInfo {
+                src_stage_mask: vk::PipelineStageFlags::COLOR_ATTACHMENT_OUTPUT,
+                dst_stage_mask: vk::PipelineStageFlags::BOTTOM_OF_PIPE,
+                images_barriers: vec![vk::ImageMemoryBarrier::builder()
+                    .src_access_mask(vk::AccessFlags::COLOR_ATTACHMENT_WRITE)
+                    .dst_access_mask(vk::AccessFlags::empty())
+                    .old_layout(vk::ImageLayout::COLOR_ATTACHMENT_OPTIMAL)
+                    .new_layout(vk::ImageLayout::PRESENT_SRC_KHR)
+                    .subresource_range(vk::ImageSubresourceRange {
+                        aspect_mask: vk::ImageAspectFlags::COLOR,
+                        base_mip_level: 0,
+                        level_count: 1,
+                        base_array_layer: 0,
+                        layer_count: 1,
+                    })
+                    .image(image)
+                    .build()],
+            })
+            .stop_recording()
+            .submit_and_wait(SubmitInfo {
+                wait_dst_stage_mask: vec![vk::PipelineStageFlags::COLOR_ATTACHMENT_OUTPUT],
+                signal_semaphores: vec![render.render_semaphore.inner()],
+                wait_semaphores: vec![render.acquire_semaphore.inner()],
+                queue: render.queues.main(),
+            });
+    };
 
     // Present the image to the screen
     render.swapchain.present_image(
@@ -286,13 +216,4 @@ fn render(render: Res<Render>) {
         image_index,
         &render.render_semaphore,
     );
-
-    // Wait for the graphic queue to finish rendering
-    unsafe {
-        render
-            .device
-            .logical()
-            .queue_wait_idle(render.queues.main())
-            .expect("Failed to wait for graphic queue to finish rendering");
-    }
 }
