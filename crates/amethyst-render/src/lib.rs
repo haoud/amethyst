@@ -1,10 +1,14 @@
 use amethyst_vulkan::{
+    buffer::{
+        Buffer, BufferAccess, BufferAllocator, BufferCreateInfo, BufferDataInfo,
+        BufferMemoryLocation, BufferTransfert, BufferUsage, BufferUsageInfo,
+    },
     command::{
         CommandBuffer, CommandPool, DrawInfo, PipelineBarrierInfo, RenderingInfo, SubmitInfo,
     },
     context::VulkanContext,
     device::{VulkanDevice, VulkanQueues},
-    pipeline::{NoVertex, Pipeline, PipelineCreateInfo},
+    pipeline::{Pipeline, PipelineCreateInfo},
     semaphore::Semaphore,
     shader::{ShaderModule, ShaderType},
     swapchain::{Surface, VulkanSwapchain},
@@ -14,7 +18,26 @@ use bevy::{
     window::{PrimaryWindow, RawHandleWrapperHolder},
 };
 use std::sync::Arc;
+use vertex::Vertex2DColor;
 use vulkanalia::prelude::v1_3::*;
+
+pub mod vertex;
+
+/// The vertices of the triangle
+static VERTICES: [Vertex2DColor; 3] = [
+    Vertex2DColor {
+        position: [0.0, -0.5],
+        color: [0.0, 0.0, 1.0],
+    },
+    Vertex2DColor {
+        position: [0.5, 0.5],
+        color: [1.0, 0.0, 0.0],
+    },
+    Vertex2DColor {
+        position: [-0.5, 0.5],
+        color: [0.0, 1.0, 0.0],
+    },
+];
 
 #[derive(Debug)]
 pub struct AmethystRender;
@@ -23,6 +46,7 @@ impl Plugin for AmethystRender {
     fn build(&self, app: &mut App) {
         app.add_systems(Startup, create_vulkan_context);
         app.add_systems(Update, render);
+        app.add_systems(PostUpdate, wait_for_device.run_if(is_exiting));
     }
 }
 
@@ -30,8 +54,15 @@ impl Plugin for AmethystRender {
 /// The order of fields in the struct is important to ensure that the resources are dropped in the
 /// right order. The fields are dropped in the order they are defined in the struct, and some fields
 /// must be destroyed before others. Please keep this in mind when adding new fields to the struct.
+#[allow(dead_code)]
 #[derive(Debug, Resource)]
 pub struct Render {
+    /// A vertex buffer that holds the vertices of the triangle
+    buffer: Buffer,
+
+    /// A buffer allocator used to allocate buffers
+    buffer_allocator: Arc<BufferAllocator>,
+
     /// A semaphore used to signal when the swapchain image is acquired
     acquire_semaphore: Semaphore,
 
@@ -51,7 +82,6 @@ pub struct Render {
     device: Arc<VulkanDevice>,
 
     /// The Vulkan context object that holds the Vulkan instance
-    #[allow(dead_code)]
     context: Arc<VulkanContext>,
 }
 
@@ -87,7 +117,7 @@ fn create_vulkan_context(
     // render a simple triangle, we don't need to pass any vertex data
     // to the vertex shader (hence the `NoVertex` type) and we also don't
     // need to write to the depth buffer.
-    let pipeline = Pipeline::new::<NoVertex>(
+    let pipeline = Pipeline::new::<Vertex2DColor>(
         device.clone(),
         &swapchain,
         PipelineCreateInfo {
@@ -103,16 +133,35 @@ fn create_vulkan_context(
                     include_str!("../shaders/fragment.glsl").to_string(),
                 ),
             ],
-
             depth_write: false,
             depth_test: false,
+            front_face: vk::FrontFace::CLOCKWISE,
+            cull_mode: vk::CullModeFlags::NONE,
             ..Default::default()
+        },
+    );
+
+    let buffer_allocator = Arc::new(BufferAllocator::new(&context, &device));
+    let buffer = Buffer::new(
+        buffer_allocator.clone(),
+        BufferCreateInfo {
+            usage: BufferUsageInfo {
+                location: BufferMemoryLocation::PreferHostVisible,
+                transfer: BufferTransfert::Destination,
+                access: BufferAccess::Sequential,
+                usage: BufferUsage::Vertices,
+                memory_type: 0,
+            },
+            alignment: core::mem::align_of::<Vertex2DColor>(),
+            data: BufferDataInfo::Slice(&VERTICES),
         },
     );
 
     command.insert_resource(Render {
         acquire_semaphore: Semaphore::new(device.clone()),
         render_semaphore: Semaphore::new(device.clone()),
+        buffer_allocator,
+        buffer,
         context,
         device,
         swapchain,
@@ -121,6 +170,7 @@ fn create_vulkan_context(
     });
 }
 
+// Render the triangle
 fn render(render: Res<Render>) {
     let command_pool = CommandPool::new(
         render.device.clone(),
@@ -162,6 +212,7 @@ fn render(render: Res<Render>) {
                     .build()],
             })
             .bind_graphic_pipeline(&render.pipeline)
+            .bind_vertex_buffer(&render.buffer)
             .start_rendering(RenderingInfo {
                 colors_attachements: vec![vk::RenderingAttachmentInfo::builder()
                     .image_layout(vk::ImageLayout::COLOR_ATTACHMENT_OPTIMAL)
@@ -216,4 +267,26 @@ fn render(render: Res<Render>) {
         image_index,
         &render.render_semaphore,
     );
+}
+
+/// A system that verifies if the application is about to exit. This system returns
+/// `true` if the application is about to exit, and `false` otherwise.
+pub fn is_exiting(mut event: EventReader<AppExit>) -> bool {
+    event.read().next().is_some()
+}
+
+/// A system that waits for the device to finish all operations before returning. This
+/// is useful when the application is about to exit and we want to make sure that all
+/// resources are destroyed before the application closes without destroying a
+/// resource that is still in use.
+pub fn wait_for_device(render: ResMut<Render>) {
+    // Wait for the device to finish all operations before destroying the
+    // resources
+    unsafe {
+        render
+            .device
+            .logical()
+            .device_wait_idle()
+            .expect("Failed to wait for device idle")
+    };
 }

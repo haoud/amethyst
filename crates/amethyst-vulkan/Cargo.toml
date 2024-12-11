@@ -7,10 +7,13 @@ version = "0.1.0"
 features = ["libloading", "window", "provisional"]
 version = "0.25"
 
+[dependencies.vma]
+package = "vulkanalia-vma"
+version = "0.2"
+
 [dependencies]
 bevy = {workspace = true}
 bitflags = "2.4.0"
 log = "0.4.20"
 raw-window-handle = {workspace = true}
 shaderc = "0.8.3"
-vulkanalia-vma = "0.2"

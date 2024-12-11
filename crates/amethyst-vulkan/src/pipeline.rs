@@ -73,22 +73,19 @@ impl Pipeline {
             .min_depth(0.0)
             .max_depth(1.0)
             .x(0.0)
-            .y(0.0)
-            .build();
+            .y(0.0);
 
         // Configure the static scissor
         let scissor = vk::Rect2D::builder()
             .offset(vk::Offset2D { x: 0, y: 0 })
-            .extent(swapchain.extent())
-            .build();
+            .extent(swapchain.extent());
 
         // Create the viewport state
         let viewports = &[viewport];
         let scissors = &[scissor];
         let viewport_state = vk::PipelineViewportStateCreateInfo::builder()
             .viewports(viewports)
-            .scissors(scissors)
-            .build();
+            .scissors(scissors);
 
         // Configure the rasterization state
         let rasterization_state = vk::PipelineRasterizationStateCreateInfo::builder()
@@ -98,43 +95,37 @@ impl Pipeline {
             .rasterizer_discard_enable(false)
             .depth_clamp_enable(false)
             .depth_bias_enable(false)
-            .line_width(1.0)
-            .build();
+            .line_width(1.0);
 
         // Configure the multisample state
         let multisample_state = vk::PipelineMultisampleStateCreateInfo::builder()
             .rasterization_samples(vk::SampleCountFlags::_1)
-            .sample_shading_enable(false)
-            .build();
+            .sample_shading_enable(false);
 
         let attachment = vk::PipelineColorBlendAttachmentState::builder()
             .color_write_mask(vk::ColorComponentFlags::all())
-            .blend_enable(false)
-            .build();
+            .blend_enable(false);
 
         let attachments = &[attachment];
         let color_blend_state = vk::PipelineColorBlendStateCreateInfo::builder()
             .blend_constants([0.0, 0.0, 0.0, 0.0])
             .logic_op(vk::LogicOp::COPY)
             .logic_op_enable(false)
-            .attachments(attachments)
-            .build();
+            .attachments(attachments);
 
         let depth_stencil_state = vk::PipelineDepthStencilStateCreateInfo::builder()
             .depth_write_enable(info.depth_write)
             .depth_test_enable(info.depth_test)
             .depth_bounds_test_enable(false)
             .depth_compare_op(vk::CompareOp::LESS)
-            .stencil_test_enable(false)
-            .build();
+            .stencil_test_enable(false);
 
         // Create the rendering info struct, since we use dynamic rendering
         // which is not included in the base pipeline create info struct.
         let format = [swapchain.format()];
         let mut rendering_info = vk::PipelineRenderingCreateInfo::builder()
             .depth_attachment_format(info.depth_format.into())
-            .color_attachment_formats(&format)
-            .build();
+            .color_attachment_formats(&format);
 
         // Register all the previous structs into the pipeline create infos
         let creat_info = vk::GraphicsPipelineCreateInfo::builder()

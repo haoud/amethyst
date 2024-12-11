@@ -1,9 +1,9 @@
-use crate::{device::VulkanDevice, pipeline::Pipeline};
+use crate::{buffer::Buffer, device::VulkanDevice, pipeline::Pipeline};
 use std::{marker::PhantomData, sync::Arc};
 use vulkanalia::prelude::v1_3::*;
 
 /// A command pool. Command pools are used to allocate command buffers. Commands
-/// buffers from the same pool must be accessed from the same thread. If you need
+/// bufferdevices from the same pool must be accessed from the same thread. If you need
 /// to use command buffers from multiple threads, you need to create multiple
 /// command pools.
 #[derive(Debug)]
@@ -79,9 +79,6 @@ impl State for Executable {}
 /// submitted to the GPU.
 #[derive(Debug)]
 pub struct CommandBuffer<'pool, T: State = Idle> {
-    /// The device that owns the command buffer.
-    device: Arc<VulkanDevice>,
-
     /// The vulkan command buffer object.
     inner: vk::CommandBuffer,
 
@@ -98,6 +95,12 @@ impl<T: State> CommandBuffer<'_, T> {
     #[must_use]
     pub const fn inner(&self) -> vk::CommandBuffer {
         self.inner
+    }
+
+    /// Returns the device that owns the command buffer.
+    #[must_use]
+    pub fn device(&self) -> &Arc<VulkanDevice> {
+        &self.pool.device
     }
 }
 
@@ -118,7 +121,6 @@ impl<'pool> CommandBuffer<'pool, Idle> {
         };
 
         Self {
-            device: Arc::clone(&pool.device),
             state: PhantomData,
             inner,
             pool,
@@ -134,7 +136,8 @@ impl<'pool> CommandBuffer<'pool, Idle> {
             .flags(vk::CommandBufferUsageFlags::ONE_TIME_SUBMIT);
 
         unsafe {
-            self.device
+            self.pool
+                .device
                 .logical()
                 .begin_command_buffer(self.inner, &begin_info)
                 .expect("Failed to begin command buffer");
@@ -144,7 +147,6 @@ impl<'pool> CommandBuffer<'pool, Idle> {
         // without running the destructor.
         let command = std::mem::ManuallyDrop::new(self);
         CommandBuffer {
-            device: Arc::clone(&command.device),
             state: PhantomData,
             inner: command.inner,
             pool: command.pool,
@@ -160,7 +162,7 @@ impl<'pool> CommandBuffer<'pool, Recording> {
         let images_barriers = info.images_barriers.as_slice();
 
         unsafe {
-            self.device.logical().cmd_pipeline_barrier(
+            self.device().logical().cmd_pipeline_barrier(
                 self.inner,
                 info.src_stage_mask.into(),
                 info.dst_stage_mask.into(),
@@ -177,11 +179,25 @@ impl<'pool> CommandBuffer<'pool, Recording> {
     #[must_use]
     pub fn bind_graphic_pipeline(self, pipeline: &Pipeline) -> Self {
         unsafe {
-            self.device.logical().cmd_bind_pipeline(
+            self.device().logical().cmd_bind_pipeline(
                 self.inner,
                 vk::PipelineBindPoint::GRAPHICS,
                 pipeline.inner(),
             );
+        }
+        self
+    }
+
+    /// Bind a vertex buffer to the command buffer.
+    #[must_use]
+    pub fn bind_vertex_buffer(self, buffer: &Buffer) -> Self {
+        let offset = buffer.start_offset();
+        let buffers = [buffer.inner()];
+
+        unsafe {
+            self.device()
+                .logical()
+                .cmd_bind_vertex_buffers(self.inner, 0, &buffers, &[offset]);
         }
         self
     }
@@ -199,7 +215,7 @@ impl<'pool> CommandBuffer<'pool, Recording> {
             .layer_count(1);
 
         unsafe {
-            self.device
+            self.device()
                 .logical()
                 .cmd_begin_rendering(self.inner, &rendering_info);
         }
@@ -212,7 +228,7 @@ impl<'pool> CommandBuffer<'pool, Recording> {
     /// TODO
     #[must_use]
     pub unsafe fn draw(self, info: DrawInfo) -> Self {
-        self.device.logical().cmd_draw(
+        self.device().logical().cmd_draw(
             self.inner,
             info.vertex_count,
             info.instance_count,
@@ -225,7 +241,7 @@ impl<'pool> CommandBuffer<'pool, Recording> {
     /// End a dynamic render pass instance
     #[must_use]
     pub fn stop_rendering(self) -> Self {
-        unsafe { self.device.logical().cmd_end_rendering(self.inner) }
+        unsafe { self.device().logical().cmd_end_rendering(self.inner) }
         self
     }
 
@@ -236,7 +252,7 @@ impl<'pool> CommandBuffer<'pool, Recording> {
     #[must_use]
     pub fn stop_recording(self) -> CommandBuffer<'pool, Executable> {
         unsafe {
-            self.device
+            self.device()
                 .logical()
                 .end_command_buffer(self.inner)
                 .expect("Failed to end command buffer");
@@ -246,7 +262,6 @@ impl<'pool> CommandBuffer<'pool, Recording> {
         // without running the destructor.
         let command = std::mem::ManuallyDrop::new(self);
         CommandBuffer {
-            device: Arc::clone(&command.device),
             state: PhantomData,
             inner: command.inner,
             pool: command.pool,
@@ -265,14 +280,14 @@ impl<'pool> CommandBuffer<'pool, Executable> {
             .command_buffers(&commands);
 
         unsafe {
-            self.device
+            self.device()
                 .logical()
                 .queue_submit(info.queue, &[submit_info], vk::Fence::null())
                 .expect("Failed to submit command buffer to graphics queue");
         }
 
         unsafe {
-            self.device
+            self.device()
                 .logical()
                 .queue_wait_idle(info.queue)
                 .expect("Failed to wait for graphic queue to finish rendering");
@@ -283,7 +298,7 @@ impl<'pool> CommandBuffer<'pool, Executable> {
 impl<T: State> Drop for CommandBuffer<'_, T> {
     fn drop(&mut self) {
         unsafe {
-            self.device
+            self.device()
                 .logical()
                 .free_command_buffers(self.pool.inner(), &[self.inner]);
         }
