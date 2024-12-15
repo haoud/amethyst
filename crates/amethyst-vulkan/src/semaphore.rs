@@ -66,7 +66,7 @@ impl Fence {
         Self { device, inner }
     }
 
-    /// Query the current status of the fence without resetting it no
+    /// Query the current status of the fence without resetting it nor
     /// waiting for it.
     pub fn query(&self) -> FenceStatus {
         let status = unsafe {

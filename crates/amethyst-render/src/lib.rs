@@ -39,6 +39,7 @@ static VERTICES: [Vertex2DColor; 3] = [
     },
 ];
 
+/// A plugin that adds the Vulkan rendering capabilities to the application
 #[derive(Debug)]
 pub struct AmethystRender;
 
@@ -50,6 +51,8 @@ impl Plugin for AmethystRender {
     }
 }
 
+/// The render resource that holds all the Vulkan resources used for rendering
+///
 /// # Important
 /// The order of fields in the struct is important to ensure that the resources are dropped in the
 /// right order. The fields are dropped in the order they are defined in the struct, and some fields
@@ -150,10 +153,10 @@ fn create_vulkan_context(
                 transfer: BufferTransfert::Destination,
                 access: BufferAccess::Sequential,
                 usage: BufferUsage::Vertices,
-                memory_type: 0,
+                ..Default::default()
             },
-            alignment: core::mem::align_of::<Vertex2DColor>(),
             data: BufferDataInfo::Slice(&VERTICES),
+            ..Default::default()
         },
     );
 

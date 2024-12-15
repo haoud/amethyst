@@ -35,6 +35,7 @@ impl BufferAllocator {
     }
 }
 
+/// A buffer object that can be used to store data on the GPU.
 #[derive(Debug)]
 pub struct Buffer {
     /// The buffer allocator that allocated this buffer.
@@ -82,7 +83,13 @@ impl Buffer {
         // Copy the data to the buffer if it is provided.
         if let BufferDataInfo::Slice(data) = create_info.data {
             match create_info.usage.location {
-                BufferMemoryLocation::PreferDeviceLocal => todo!(),
+                BufferMemoryLocation::PreferDeviceLocal => {
+                    // Create a staging buffer
+                    // Copy the data to the staging buffer
+                    // Copy the data from the staging buffer to the device local buffer
+                    // using a command buffer.
+                    todo!()
+                }
                 BufferMemoryLocation::PreferHostVisible => {
                     let allocation_info = allocator.inner().get_allocation_info(allocation);
                     let ptr = allocation_info.pMappedData as *mut T;
@@ -304,6 +311,18 @@ pub struct BufferUsageInfo {
     pub memory_type: u32,
 }
 
+impl Default for BufferUsageInfo {
+    fn default() -> Self {
+        Self {
+            location: BufferMemoryLocation::PreferDeviceLocal,
+            transfer: BufferTransfert::All,
+            access: BufferAccess::Random,
+            usage: BufferUsage::Unbounded,
+            memory_type: 0,
+        }
+    }
+}
+
 /// Information required to create a buffer.
 #[derive(Debug)]
 pub struct BufferCreateInfo<'a, T> {
@@ -317,19 +336,39 @@ pub struct BufferCreateInfo<'a, T> {
     pub data: BufferDataInfo<'a, T>,
 }
 
+impl<T> Default for BufferCreateInfo<'_, T> {
+    fn default() -> Self {
+        Self {
+            usage: BufferUsageInfo::default(),
+            alignment: core::mem::align_of::<T>(),
+            data: BufferDataInfo::Uninitialized(0),
+        }
+    }
+}
+
+/// Information about the buffer data.
 #[derive(Debug)]
 pub enum BufferDataInfo<'a, T> {
     /// Create a buffer with uninitialized data with the given size.
     Uninitialized(usize),
 
-    /// Create a buffer with the given data.
+    /// Create a buffer with the given data slice.
     Slice(&'a [T]),
 }
 
 impl<T> BufferDataInfo<'_, T> {
+    /// Get the number of `T` elements in the buffer data
+    #[must_use]
+    pub const fn count(&self) -> usize {
+        match self {
+            BufferDataInfo::Uninitialized(size) => *size / std::mem::size_of::<T>(),
+            BufferDataInfo::Slice(data) => data.len(),
+        }
+    }
+
     /// Get the size of the buffer data, in bytes.
     #[must_use]
-    pub fn size(&self) -> usize {
+    pub const fn size(&self) -> usize {
         match self {
             BufferDataInfo::Uninitialized(size) => *size,
             BufferDataInfo::Slice(data) => data.len() * std::mem::size_of::<T>(),

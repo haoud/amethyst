@@ -207,7 +207,7 @@ impl Default for PipelineCreateInfo {
     fn default() -> Self {
         Self {
             front_face: vk::FrontFace::COUNTER_CLOCKWISE,
-            cull_mode: vk::CullModeFlags::NONE,
+            cull_mode: vk::CullModeFlags::BACK,
             fill_mode: vk::PolygonMode::FILL,
             depth_format: vk::Format::UNDEFINED,
             depth_write: false,
